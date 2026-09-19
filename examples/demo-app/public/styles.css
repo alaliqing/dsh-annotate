@@ -1,0 +1,70 @@
+:root {
+  --bg: #f7f6f5;
+  --card: #ffffff;
+  --ink: #16131b;
+  --muted: #6f6975;
+  --line: rgba(22, 19, 27, 0.1);
+  --accent: #6d4aff;
+  --ok: #2f9e6b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 -apple-system, "PingFang SC", system-ui, sans-serif;
+}
+.bar {
+  display: flex; align-items: center; gap: 18px;
+  padding: 12px 22px; background: var(--card); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 650; letter-spacing: -0.01em; }
+.brand em { color: var(--muted); font-style: normal; font-size: 12px; font-weight: 500; }
+.tabs { display: flex; gap: 4px; margin-left: auto; }
+.tabs button {
+  padding: 6px 12px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--muted); font: inherit; cursor: pointer;
+}
+.tabs button[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.ghost { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; font: inherit; cursor: pointer; }
+main { max-width: 720px; margin: 0 auto; padding: 26px 22px 80px; }
+h1 { margin: 0 0 16px; font-size: 27px; letter-spacing: -0.03em; }
+h1 small { color: var(--muted); font-size: 14px; font-weight: 500; }
+.cards { display: grid; gap: 12px; }
+.card { position: relative; padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.card--accent { background: linear-gradient(135deg, #fff, color-mix(in srgb, var(--accent) 10%, #fff)); }
+.card h2 { margin: 0 0 4px; font-size: 15px; }
+.card p { margin: 0 0 8px; color: var(--muted); font-size: 12.5px; }
+.pill { font-size: 11px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); padding: 2px 8px; border-radius: 20px; }
+.composer { margin: 22px 0; padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.composer label { display: block; margin-bottom: 6px; font-size: 11px; font-weight: 650; color: var(--muted); }
+.composer textarea { width: 100%; min-height: 96px; padding: 20px; border: 1px solid var(--line); border-radius: 9px; font: inherit; resize: vertical; }
+.composer-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.hint { font-size: 11px; color: var(--muted); }
+.primary { margin-left: auto; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+.scroller { max-height: 84px; overflow: auto; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; color: var(--muted); }
+.scroller p { margin: 0 0 6px; }
+.core-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.picker { display: grid; align-content: start; gap: 6px; }
+.picker-label { font-size: 11px; font-weight: 650; color: var(--muted); }
+.select {
+  width: 100%; min-height: 46px; display: grid; grid-template-columns: 66px minmax(0, 1fr) 18px;
+  align-items: center; gap: 10px; padding: 5px 12px 5px 6px; text-align: left;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; font: inherit; cursor: pointer;
+}
+.swatch { width: 66px; height: 30px; border-radius: 7px; background: linear-gradient(135deg, #6d4aff, #f0a05a); }
+.sample { width: 54px; min-height: 34px; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 70%, #fff); border-right: 1px solid var(--line); font-weight: 600; }
+.select-copy { display: grid; gap: 1px; min-width: 0; }
+.select-copy strong { font-size: 13px; }
+.select-copy em { color: var(--muted); font-style: normal; font-size: 11px; }
+.caret { color: var(--muted); }
+.picker-hint { margin: 0; font-size: 11px; line-height: 1.45; color: var(--muted); }
+.tokens { display: grid; gap: 7px; margin: 20px 0 10px; }
+.token { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.token span { flex: 1; color: var(--muted); }
+.contrast { margin: 0; font-size: 11px; color: var(--muted); }
+.contrast strong { color: var(--ok); }
+.badge {
+  position: fixed; right: 16px; bottom: 16px; padding: 6px 10px; border-radius: 8px;
+  background: var(--ink); color: #fff; font-size: 11px;
+}

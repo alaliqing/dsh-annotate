@@ -1,0 +1,10 @@
+{
+  "name": "dsh-annotate-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Zero-dependency, prefix-aware dev server used to develop the annotation plugin itself",
+  "type": "module",
+  "scripts": {
+    "dev:panel": "node server.mjs --port 5180 --base /app/"
+  }
+}

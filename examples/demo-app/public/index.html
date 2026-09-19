@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Annotation fixture</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <span class="brand">Fixture <em>dev build</em></span>
+      <nav class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-view="dashboard">Dashboard</button>
+        <button role="tab" aria-selected="false" data-view="settings">Settings</button>
+      </nav>
+      <button class="ghost" id="ping">Ping server</button>
+    </header>
+
+    <main>
+      <!-- Dashboard: a grid of cards, a scroll region and a fixed badge, so the
+           overlay meets relative/absolute/overflow layouts like a real app. -->
+      <section class="view" data-view="dashboard">
+        <h1>What do you want to understand?</h1>
+        <div class="cards">
+          <article class="card" data-testid="card-diffusion">
+            <h2>diffusion model 的原理是什么</h2>
+            <p>Last read: denoising, latent space, classifier-free guidance.</p>
+            <span class="pill">4 concepts</span>
+          </article>
+          <article class="card" data-testid="card-reinforcement">
+            <h2>强化学习</h2>
+            <p>Last read: policy gradient, value estimation, exploration.</p>
+            <span class="pill">24 concepts</span>
+          </article>
+          <article class="card card--accent">
+            <h2>山海经</h2>
+            <p>Last read: 神话地理、异兽、祭祀与巫文化。</p>
+            <span class="pill">9 concepts</span>
+          </article>
+        </div>
+
+        <form class="composer" id="ask">
+          <label for="question">Ask a question</label>
+          <textarea id="question" aria-label="Your question" placeholder="Ask a question, or name an idea you want to explore..."></textarea>
+          <div class="composer-foot">
+            <span class="hint">Enter to start · Shift+Enter for a new line</span>
+            <button class="primary" type="submit">Begin exploration</button>
+          </div>
+        </form>
+
+        <div class="scroller">
+          <p>Scroll region: the overlay must track elements inside it.</p>
+          <p>Line two.</p>
+          <p>Line three.</p>
+          <p>Line four.</p>
+          <p>Line five.</p>
+          <p>Line six.</p>
+        </div>
+      </section>
+
+      <!-- Settings: two pickers side by side (the pair that must stay equal
+           height) plus a token list and a live contrast readout. -->
+      <section class="view" data-view="settings" hidden>
+        <h1>Settings <small>appearance</small></h1>
+        <div class="core-grid">
+          <div class="picker">
+            <span class="picker-label">Preset themes</span>
+            <button class="select" aria-label="Theme preset">
+              <span class="swatch"></span>
+              <span class="select-copy"><strong>Paper</strong><em>Warm canvas, violet accent.</em></span>
+              <span class="caret">▾</span>
+            </button>
+            <p class="picker-hint">Warm canvas, white cards, graphite text, violet accent.</p>
+          </div>
+          <div class="picker">
+            <span class="picker-label">Content typeface</span>
+            <button class="select" aria-label="Content typeface">
+              <span class="sample">Ag 山</span>
+              <span class="select-copy"><strong>Default</strong><em>Applies to cards and reader.</em></span>
+              <span class="caret">▾</span>
+            </button>
+            <p class="picker-hint">Applies to Canvas cards and Reader only; the interface stays in the system font.</p>
+          </div>
+        </div>
+
+        <div class="tokens">
+          <label class="token"><span>Reading text</span><input type="color" value="#16131b" /></label>
+          <label class="token"><span>Card</span><input type="color" value="#ffffff" /></label>
+          <label class="token"><span>Accent</span><input type="color" value="#6d4aff" /></label>
+        </div>
+        <p class="contrast" id="contrast">Text contrast 18.4:1 · AA pass</p>
+      </section>
+    </main>
+
+    <div class="badge" title="fixed overlay probe">v0</div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
