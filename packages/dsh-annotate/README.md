@@ -44,6 +44,20 @@ Annotation 模式点元素写评论；`⌘/Ctrl+点击`立即提交；评论汇�
 语义锚点与组件链给出代码坐标，视口定位给出"在哪一眼可读"。纯视觉缺陷（遮挡/裁切/对比度）
 用文字描述即可；**修复后的验证由 AI 自己截图核对**（它有 Playwright + 同源桥，这一整轮就是这么验的）。
 
+## 配置
+
+```yaml
+- name: dsh-annotate
+  config:
+    command: "npm run dev:panel"   # 或在 argv 里给数组；默认 npm run dev:panel
+    port: 5180                     # dev server 端口，默认 5180
+    base: "/app"                   # 该 server 的前缀，默认 /app
+    readyTimeoutMs: 45000          # 等端口就绪的上限
+```
+
+`command`/`port`/`base` 必须与桥的 `target`/`prefix` 一致；客户端用宿主半返回的
+`base` 拼同源地址，所以换成任何项目都只改这几行（不需要改插件代码）。
+
 ## 依赖：同源桥
 
 浏览器的同源策略决定了跨源 iframe 的 DOM 读不到，所以标注**必须**在

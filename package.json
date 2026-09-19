@@ -8,6 +8,8 @@
   "scripts": {
     "build": "node packages/dsh-annotate/build.mjs",
     "check": "npm run build && node --check packages/dsh-annotate/lib/index.js && node --check packages/dsh-annotate/lib/client.js && node --check packages/dsh-app-bridge/lib/index.js",
+    "dev": "node scripts/dev.mjs",
+    "dev:app": "node examples/demo-app/server.mjs --port 5180 --base /app/",
     "test:overlay": "node tests/overlay.mjs",
     "test:gui": "node tests/gui-smoke.mjs"
   },

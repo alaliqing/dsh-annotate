@@ -29,7 +29,19 @@ const CHANNEL_OUT = 'dsh-annotate-panel'
 const KIND = 'annotate'
 const TAB_ID = 'dsh-annotate'
 const MARKER = '#f0a05a'
-const DEFAULT_PATH = '/app/'
+/** Only a first-paint fallback: the host half reports the configured base. */
+const FALLBACK_BASE = '/app/'
+
+/** The preview lives on the harness origin (same-origin bridge), under whatever
+ *  base the profile configured. */
+const sameOriginUrl = (base) => location.origin + normalizeClientBase(base)
+
+function normalizeClientBase(value) {
+  const raw = String(value === undefined || value === null || value === '' ? FALLBACK_BASE : value).trim()
+  if (!raw || raw === '/') return '/'
+  const withLead = raw.startsWith('/') ? raw : '/' + raw
+  return withLead.endsWith('/') ? withLead : withLead + '/'
+}
 
 const PANEL_CSS = `
 /* A column of the page, not a card over it: no radius, no shadow, no glass —
@@ -238,11 +250,13 @@ function apply(ctx) {
       panel = {
         sid: key,
         model: makeModel({
-          url: DEFAULT_PATH,
-          draftUrl: DEFAULT_PATH,
+          base: FALLBACK_BASE,
+          command: 'npm run dev:panel',
+          url: FALLBACK_BASE,
+          draftUrl: FALLBACK_BASE,
           annotations: [],
           viewport: { w: 0, h: 0 },
-          page: DEFAULT_PATH,
+          page: FALLBACK_BASE,
           mode: 'idle',
           cors: false,
           pending: [],
@@ -252,7 +266,7 @@ function apply(ctx) {
           log: [],
           logOpen: false,
           root: '',
-          hostUrl: 'http://127.0.0.1:5180/app/',
+          hostUrl: '',
         }),
         draftWriter: null,
       }
@@ -346,16 +360,19 @@ function apply(ctx) {
       panel.model.set({ status: 'error', statusText: '拿不到工作区目录' })
       return
     }
-    panel.model.set({ status: 'starting', statusText: '启动 dev server…' })
+    panel.model.set({ status: 'starting', statusText: '启动：' + panel.model.get().command })
     const started = await api('start', { sid: panel.sid, root: root })
     if (started && started.ok) {
+      const base = started.base || panel.model.get().base
       panel.model.set({
         status: 'running',
         statusText: '',
+        base: base,
+        command: started.command || panel.model.get().command,
         log: started.log || [],
         hostUrl: started.url || panel.model.get().hostUrl,
-        url: location.origin + DEFAULT_PATH,
-        draftUrl: location.origin + DEFAULT_PATH,
+        url: sameOriginUrl(base),
+        draftUrl: sameOriginUrl(base),
       })
     } else {
       panel.model.set({ status: 'error', statusText: (started && started.error) || '启动失败', log: (started && started.log) || [] })
@@ -365,11 +382,14 @@ function apply(ctx) {
   const refreshHost = async (panel) => {
     const res = await api('state', { sid: panel.sid })
     if (!res || !res.ok) return
-    panel.model.set({
+    const patch = {
       status: res.running ? 'running' : res.starting ? 'starting' : panel.model.get().status === 'error' ? 'error' : 'idle',
       log: res.log || [],
       hostUrl: res.url || panel.model.get().hostUrl,
-    })
+    }
+    if (res.base) patch.base = res.base
+    if (res.command) patch.command = res.command
+    panel.model.set(patch)
   }
 
   // --------------------------------------------------------------- tab body
@@ -449,7 +469,7 @@ function apply(ctx) {
     }
 
     const commitUrl = () => {
-      const next = state.draftUrl && state.draftUrl.trim() ? state.draftUrl.trim() : DEFAULT_PATH
+      const next = state.draftUrl && state.draftUrl.trim() ? state.draftUrl.trim() : sameOriginUrl(state.base)
       panel.model.set({ url: next, draftUrl: next, cors: false })
     }
     const toggleMode = () => {
@@ -469,7 +489,7 @@ function apply(ctx) {
           className: 'dsa-url',
           value: state.draftUrl,
           spellCheck: false,
-          placeholder: 'http://127.0.0.1:3080/app/',
+          placeholder: sameOriginUrl(state.base),
           title: '预览地址：必须是同源地址（见 README 的同源桥）',
           onChange: (event) => panel.model.set({ draftUrl: event.target.value }),
           onKeyDown: (event) => {
@@ -506,7 +526,11 @@ function apply(ctx) {
           {
             className: 'dsa-status',
             'data-state': state.status,
-            title: state.statusText || (state.status === 'running' ? 'dev server 运行中 · ' + state.hostUrl : '点一下启动 dev server'),
+            title:
+              state.statusText ||
+              (state.status === 'running'
+                ? 'dev server 运行中 · ' + state.hostUrl
+                : '点一下启动：' + state.command),
           },
           React.createElement('i'),
           state.status === 'running' ? '运行中' : state.status === 'starting' ? '启动中' : state.status === 'error' ? '出错' : '未运行'
@@ -562,10 +586,8 @@ function apply(ctx) {
               React.createElement(
                 'p',
                 null,
-                '同源策略下跨端口 iframe 的 DOM 读不到。用同源桥预览：终端运行 ',
-                React.createElement('code', null, 'npm run dev:panel'),
-                '，地址填 ',
-                React.createElement('code', null, location.origin + DEFAULT_PATH)
+                '同源策略下跨端口 iframe 的 DOM 读不到。用同源桥预览：profile 里把桥的 target/prefix 指向这个项目，地址填 ',
+                React.createElement('code', null, sameOriginUrl(state.base))
               )
             )
           : null,

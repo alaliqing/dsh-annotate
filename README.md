@@ -49,17 +49,31 @@ pnpm add link:<path-to-repo>/packages/dsh-annotate
 dsh web
 ```
 
-## The consuming app needs one thing
+## Pointing it at a project
 
-Serve the dev build under the bridge's prefix, so preview URL and app agree:
+Two config blocks have to agree, and the project has to serve under one prefix:
+
+```yaml
+- insert:
+    - name: dsh-app-bridge
+      config: { target: "http://127.0.0.1:5180", prefix: "/app" }
+    - name: dsh-annotate
+      config:
+        command: "npm run dev:panel"   # or argv: [...]; default `npm run dev:panel`
+        port: 5180                     # default 5180
+        base: "/app"                   # default /app
+```
 
 ```json
 { "scripts": { "dev:panel": "IDD_BASE=/app/ vite --host 127.0.0.1 --port 5180 --strictPort" } }
 ```
 
-and make browser-facing API paths respect the base (any non-root mount does
-this the same way). `dsh-annotate` runs this script for you on tab open, and
-reuses an already-running server instead of fighting for the port.
+`dsh-annotate` runs that command in the session's workspace when the tab opens,
+waits for the port, and reuses an already-running server instead of fighting for
+the port. Browser-facing API paths must follow the base (`import.meta.env.BASE_URL`)
+or they will miss the prefix. Nothing else about the project is assumed — the
+bundled `examples/demo-app` is a zero-dependency example that satisfies exactly
+these requirements.
 
 Then: `⌘⇧B` (or `⌘⇧A`, the conversation header's **标注** button, or the right
 sidebar's `+` → guide entry) → the preview loads → pick elements, write notes,
@@ -102,9 +116,18 @@ node packages/dsh-annotate/build.mjs     # src/ -> lib/ (lib is committed so
 node --check packages/dsh-annotate/lib/client.js
 ```
 
+One command brings up the whole loop against the bundled fixture, on its own
+profile and port, without touching your daily harness:
+
+```bash
+node scripts/dev.mjs                      # or --base /demo/ --app-port 5199 --port 3099
+```
+
 `tests/` holds two Playwright checks against a running harness: `overlay.mjs`
 drives the injected overlay on a bare page, `gui-smoke.mjs` walks the whole
-sidebar-tab flow (auto-start → preview → annotate → send).
+sidebar-tab flow (auto-start → preview → annotate → send). See
+[DEVELOPING.md](DEVELOPING.md) for the restart matrix, the config reference and
+the fixture's ground rules.
 
 ## Status
 

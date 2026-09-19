@@ -1,9 +1,13 @@
 /**
  * dsh-annotate — Host half.
  *
- * Runs the workspace's dev server (`npm run dev:panel`) so the reader never
- * starts it by hand, and reports readiness plus a tail of its log. The client
- * reaches this half through `POST /__dsh-annotate/api`.
+ * Runs the previewed project's dev server so the reader never starts it by
+ * hand, and reports readiness plus a tail of its log. The client reaches this
+ * half through `POST /__dsh-annotate/api`.
+ *
+ * Everything project-specific is configuration: `command`/`argv` (default
+ * `npm run dev:panel`), `port` (5180) and `base` (`/app`). The matching
+ * `dsh-app-bridge` mount must use the same port and prefix.
  *
  * Screenshots were deliberately dropped: an annotation already carries the
  * selector, its match count, semantic anchors, the component chain, computed
@@ -17,7 +21,26 @@ export const inject = ['webServer', 'subprocess', 'timer']
 
 const ROUTE = '/__dsh-annotate'
 const DEFAULT_PORT = 5180
+const DEFAULT_BASE = '/app'
+const DEFAULT_COMMAND = 'npm run dev:panel'
 const LOG_LIMIT = 400
+
+/** `/app` -> `/app/`, `` -> `/`; the preview URL and the dev server's base must
+ *  agree or the app's own asset URLs escape the prefix. */
+function normalizeBase(value) {
+  const raw = String(value === undefined || value === null ? DEFAULT_BASE : value).trim()
+  if (!raw || raw === '/') return '/'
+  const withLead = raw.startsWith('/') ? raw : '/' + raw
+  return withLead.endsWith('/') ? withLead : withLead + '/'
+}
+
+/** Dev-server command: an explicit `argv` wins, otherwise a whitespace-split
+ *  `command` string (so profiles can say `node /path/server.mjs --port 5199`). */
+function resolveCommand(config) {
+  if (Array.isArray(config.argv) && config.argv.length > 0) return config.argv.map(String)
+  const text = String(config.command === undefined ? DEFAULT_COMMAND : config.command).trim()
+  return text.split(/\s+/).filter(Boolean)
+}
 
 /** Playwright driver, run inside the workspace so its own install resolves. */
 
@@ -50,7 +73,11 @@ function send(res, status, value) {
 
 export function apply(ctx, config = {}) {
   const port = Number(config.port) || DEFAULT_PORT
-  const previewUrl = `http://127.0.0.1:${port}/app/`
+  const base = normalizeBase(config.base)
+  const argv = resolveCommand(config)
+  const command = argv.join(' ')
+  const previewUrl = `http://127.0.0.1:${port}${base}`
+  const readyTimeoutMs = Number(config.readyTimeoutMs) || 45_000
   const runs = new Map()
 
   const entryFor = (sid) => {
@@ -95,7 +122,7 @@ export function apply(ctx, config = {}) {
 
   const start = async (sid, root) => {
     const entry = entryFor(sid)
-    if (entry.handle && !entry.exited) return { ok: true, running: true, url: previewUrl }
+    if (entry.handle && !entry.exited) return { ok: true, running: true, url: previewUrl, base, port, command }
     if (!root) return { ok: false, error: '不知道工作区目录，无法启动 dev server' }
     // A dev server may already be listening (started earlier, or left over from
     // a previous harness run): adopt it instead of fighting over the port.
@@ -105,7 +132,7 @@ export function apply(ctx, config = {}) {
       entry.exited = false
       entry.starting = false
       entry.log.push('· 复用已在运行的 dev server（' + previewUrl + '）')
-      return { ok: true, running: true, url: previewUrl, adopted: true, log: entry.log.slice(-20) }
+      return { ok: true, running: true, url: previewUrl, base, port, command, adopted: true, log: entry.log.slice(-20) }
     }
     entry.root = root
     entry.log = []
@@ -116,7 +143,7 @@ export function apply(ctx, config = {}) {
     entry.starting = true
     try {
       entry.handle = ctx.subprocess.spawn({
-        argv: ['npm', 'run', 'dev:panel'],
+        argv: argv,
         cwd: root,
         stdio: { stdin: 'ignore', stdout: { maxBytes: 4_000_000 }, stderr: { maxBytes: 4_000_000 } },
         graceMs: 8000,
@@ -137,12 +164,12 @@ export function apply(ctx, config = {}) {
       })
 
     // Wait until the port answers, so the client can point its iframe there.
-    const deadline = Date.now() + 45_000
+    const deadline = Date.now() + readyTimeoutMs
     while (Date.now() < deadline) {
       drain(entry)
       if (await reachable()) {
         entry.starting = false
-        return { ok: true, running: true, url: previewUrl, log: entry.log.slice(-40) }
+        return { ok: true, running: true, url: previewUrl, base, port, command, log: entry.log.slice(-40) }
       }
       if (entry.exited) {
         entry.starting = false
@@ -151,7 +178,7 @@ export function apply(ctx, config = {}) {
       await new Promise((resolve) => setTimeout(resolve, 700))
     }
     entry.starting = false
-    return { ok: false, error: '等待 dev server 就绪超时（45s）', log: entry.log.slice(-40) }
+    return { ok: false, error: '等待 dev server 就绪超时（' + Math.round(readyTimeoutMs / 1000) + 's）', log: entry.log.slice(-40) }
   }
 
   const stop = (sid) => {
@@ -186,6 +213,8 @@ export function apply(ctx, config = {}) {
           running: Boolean(entry.handle && !entry.exited),
           starting: entry.starting,
           url: previewUrl,
+          base,
+          command,
           root: entry.root,
           port,
           log: entry.log.slice(-60),
@@ -212,5 +241,7 @@ export function apply(ctx, config = {}) {
       }
     }
   })
-  ctx.logger?.('dsh-annotate')?.info?.(`dev-server control + element screenshots at ${ROUTE} (port ${port})`)
+  ctx.logger?.('dsh-annotate')?.info?.(
+    `dsh-annotate: ${command} -> ${previewUrl} (control at ${ROUTE})`
+  )
 }
