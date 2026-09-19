@@ -1,0 +1,18 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No dependencies to install: both packages only use node builtins, and
+      # the client half is a plain browser bundle.
+      - run: npm run check
+      - name: lib/ is in sync with src/
+        run: git diff --exit-code -- packages/dsh-annotate/lib packages/dsh-app-bridge/lib

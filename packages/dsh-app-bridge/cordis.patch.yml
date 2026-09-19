@@ -1,0 +1,6 @@
+# dsh-app-bridge 安装清单：dsh plugin add 时把插件行插入 profile 配置
+- insert:
+    - name: dsh-app-bridge
+      config:
+        target: http://127.0.0.1:5180
+        prefix: /app

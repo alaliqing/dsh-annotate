@@ -1,0 +1,21 @@
+dsh-annotate
+Copyright (c) 2026 qinjing. MIT licensed (see LICENSE).
+
+Third-party references
+----------------------
+
+DeepSeek Harness (@deepseek-ai/dsh-*, MIT)
+    The plugin contract this repository targets: Cordis host/client plugin
+    halves, the `dsh.client` package declaration, the web client's ModuleLoader
+    bundle format, the slot keys used for the sidebar tab and composer dock.
+
+dsh-web-preview-panel (https://github.com/zoumutou/dsh-web-preview, MIT)
+    Studied while learning the DSH client-plugin surface. No source is copied;
+    the client bundle registration wrapper in packages/dsh-annotate/build.mjs was
+    rewritten from the harness' documented format. Credit is given here because
+    that plugin was the working reference for the plugin wiring, and it is the
+    closest prior art for an in-harness element-annotation panel.
+
+Codex (in-app browser) and Claude Design
+    Product design references only — how an in-thread preview with element
+    comments behaves — no code involved.
