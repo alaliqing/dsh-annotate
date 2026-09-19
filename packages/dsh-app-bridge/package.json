@@ -1,0 +1,20 @@
+{
+  "name": "dsh-app-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reverse-proxy a local dev server onto the DeepSeek Harness origin so its pages can be annotated Same-Origin inside the harness GUI",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "plugin": {
+      "name": "dsh-app-bridge"
+    }
+  }
+}

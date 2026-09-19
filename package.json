@@ -1,0 +1,17 @@
+{
+  "name": "dsh-annotate-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Element annotation for DeepSeek Harness: a same-origin preview bridge and a right-sidebar review tab",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node packages/dsh-annotate/build.mjs",
+    "check": "npm run build && node --check packages/dsh-annotate/lib/index.js && node --check packages/dsh-annotate/lib/client.js && node --check packages/dsh-app-bridge/lib/index.js",
+    "test:overlay": "node tests/overlay.mjs",
+    "test:gui": "node tests/gui-smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.0"
+  }
+}
