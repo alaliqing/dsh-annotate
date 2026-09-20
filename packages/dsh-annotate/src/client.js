@@ -6,14 +6,14 @@
  *  - **list** — the local web servers that are actually running, discovered by
  *    the host half; one click opens one (a lone find opens itself). Nothing to
  *    configure, nothing to type. If nothing is up, it says what to run.
- *  - **page** — the opened page, proxied onto the harness origin so its DOM is
- *    readable, with element picking, comments, live style tweaks and one
+ *  - **page** — the opened page, served from its own isolated loopback preview
+ *    origin so its DOM is readable, with element picking, comments and one
  *    structured block into the composer.
  *
- * Bundled by build.mjs into the ModuleLoader format; `OVERLAY_SRC` is injected
- * there.
+ * Bundled by build.mjs into the ModuleLoader format. The overlay is a separate
+ * script the host half injects into the previewed document.
  */
-const inject = ['timer']
+const inject = ['timer', 'sessions']
 
 const CHANNEL_IN = 'dsh-annotate-overlay'
 const CHANNEL_OUT = 'dsh-annotate-panel'
@@ -21,6 +21,25 @@ const PAGE_CHANNEL = 'dsh-annotate-page'
 const KIND = 'annotate'
 const TAB_ID = 'dsh-annotate'
 const MARKER = '#f0a05a'
+
+// The panel's language is a user preference, kept on the harness origin; the
+// injected overlay is told about a change over postMessage.
+const LANG_KEY = 'dsh-annotate:lang'
+const i18n = dsaI18n((() => {
+  try { return localStorage.getItem(LANG_KEY) || '' } catch (error) { void error; return '' }
+})())
+const t = (key, vars) => i18n.t(key, vars)
+
+/** Host replies carry a stable `code` plus any template values in `detail`;
+ *  render that in the panel's language and fall back to the host's own wording. */
+const hostMessage = (reply, fallbackKey) => {
+  const code = reply && reply.code
+  if (code) {
+    const text = i18n.t('host.' + code, reply.detail || {})
+    if (text !== 'host.' + code) return text
+  }
+  return (reply && reply.error) || t(fallbackKey)
+}
 
 const PANEL_CSS = `
 /* A column of the page, not a card over it: no radius, no shadow, no glass —
@@ -54,6 +73,8 @@ const PANEL_CSS = `
 .dsa-ico:disabled { opacity:.35; cursor:default }
 .dsa-ico[data-on="true"] { color:${MARKER}; border-color:color-mix(in srgb,${MARKER} 45%,transparent); background:color-mix(in srgb,${MARKER} 12%,transparent); }
 .dsa-ico svg { width:15px; height:15px }
+/* Text button: the language switch is its own label, so no icon sizing. */
+.dsa-lang { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; letter-spacing:.02em }
 .dsa-send { height:26px; padding:0 10px; border-radius:6px; cursor:pointer; white-space:nowrap; font-size:11.5px; flex:none;
   background:${MARKER}; border:1px solid transparent; color:#20160c; font-weight:600; }
 .dsa-send:hover { opacity:.9 }
@@ -116,20 +137,15 @@ const PANEL_CSS = `
 .dsa-empty code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; padding:2px 5px; border-radius:4px;
   background:color-mix(in srgb,${MARKER} 14%,transparent); color:${MARKER} }
 
-/* Annotations live in a collapsible corner card: the page keeps its space. */
-.dsa-ovlist { position:absolute; top:8px; right:8px; z-index:5; display:flex; flex-direction:column; align-items:flex-end;
-  width:min(304px, calc(100% - 16px)); pointer-events:auto }
-.dsa-ovhead { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px; cursor:pointer;
-  border-radius:13px; border:1px solid color-mix(in srgb,${MARKER} 42%,transparent);
-  background:color-mix(in srgb,${MARKER} 20%,var(--dsw-alias-bg-layer-1,#1b1f26)); color:var(--dsw-alias-label-primary,#e8eaed);
-  font:600 11.5px/1 ui-sans-serif,system-ui,sans-serif; box-shadow:0 4px 14px rgba(0,0,0,.22) }
-.dsa-ovhead b { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:${MARKER} }
-.dsa-ovhead svg { width:14px; height:14px; opacity:.75; transition:transform .15s ease }
-.dsa-ovlist[data-open="true"] .dsa-ovhead svg { transform:rotate(180deg) }
-.dsa-ovitems { margin-top:6px; width:100%; max-height:min(52vh,360px); overflow:auto; border-radius:10px;
-  border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 12%,transparent);
-  background:color-mix(in srgb,var(--dsw-alias-bg-layer-1,#1b1f26) 94%,transparent); box-shadow:0 10px 28px rgba(0,0,0,.28) }
-.dsa-ovitems .dsa-item:last-child { border-bottom:0 }
+/* Review management belongs to the panel chrome, never on top of the app. */
+.dsa-review-toggle { position:relative; width:30px; min-width:30px; padding:0 }
+.dsa-review-toggle .dsa-review-badge { position:absolute; top:-5px; right:-5px; min-width:15px; height:15px; padding:0 3px;
+  box-sizing:border-box; border-radius:8px; text-align:center; box-shadow:0 0 0 2px var(--dsw-alias-bg-layer-1,#181d25);
+  font:700 9px/15px ui-monospace,SFMono-Regular,Menlo,monospace; color:#20160c; background:${MARKER} }
+.dsa-review-panel { flex:none; max-height:min(42%,360px); overflow:auto;
+  border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 10%,transparent);
+  background:var(--dsw-alias-bg-layer-1,#1b1f26); box-shadow:0 8px 20px rgba(0,0,0,.12) }
+.dsa-review-panel .dsa-item:last-child { border-bottom:0 }
 .dsa-list { flex:none; max-height:40%; min-height:0; overflow:auto;
   border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent) }
 /* No annotations, no row: the hint lives behind the ? instead. */
@@ -171,6 +187,40 @@ const PANEL_CSS = `
 .dsa-chip button:hover { background:rgba(0,0,0,.22); color:#fff }
 .dsa-chip-clear { all:unset; cursor:pointer; font-size:11px; color:var(--dsw-alias-label-secondary,#9aa0a6); padding:0 4px }
 .dsa-chip-clear:hover { color:${MARKER} }
+/* Review-tool rhythm: clear hierarchy, quiet surfaces, consistent targets. */
+.dsa-global-notice { position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:2147483647;padding:12px 18px;border-radius:10px;background:#202833;color:#fff;box-shadow:0 4px 18px #0003;font:13px/1.5 system-ui;max-width:calc(100vw - 32px) }
+.dsa-col { container-type:inline-size; background:var(--dsw-alias-bg-base,#11151b); font-size:13px }
+.dsa-bar { padding:10px; gap:4px; background:var(--dsw-alias-bg-layer-1,#181d25) }
+.dsa-ico { width:30px; height:30px; border-radius:7px }
+.dsa-bar .dsa-url { height:32px; font-size:12px }
+.dsa-foot { padding:10px; gap:6px; min-height:53px; background:var(--dsw-alias-bg-layer-1,#181d25) }
+.dsa-foot > .dsa-ico:first-child { width:auto; padding:0 9px; gap:5px; font-size:12px; border-color:color-mix(in srgb,currentColor 18%,transparent) }
+.dsa-send, .dsa-secondary { min-height:32px; border-radius:7px; font-size:12px; padding:0 10px }
+.dsa-secondary { color:inherit; background:transparent; border:1px solid color-mix(in srgb,currentColor 20%,transparent); cursor:pointer; white-space:nowrap }
+.dsa-secondary:disabled { opacity:.4; cursor:default }
+.dsa-width { flex:0 0 82px; width:82px; height:30px; padding:0 22px 0 8px; box-sizing:border-box; font-size:11px;
+  background:transparent; color:inherit; border:1px solid color-mix(in srgb,currentColor 15%,transparent); border-radius:6px }
+.dsa-stage { overflow:hidden; background:var(--dsw-alias-bg-layer-1,#181d25) }
+.dsa-frame { background:white }
+.dsa-stagefoot { display:none }
+.dsa-col button:focus-visible, .dsa-col select:focus-visible { outline:2px solid ${MARKER}; outline-offset:2px }
+.dsa-sechead { font-size:12px; font-weight:600; line-height:1.5; letter-spacing:0; text-transform:none; padding:18px 14px 10px }
+.dsa-svc { width:calc(100% - 20px); margin:0 10px 7px; padding:12px; border:1px solid color-mix(in srgb,currentColor 10%,transparent); border-radius:10px }
+.dsa-svc:hover { border-color:color-mix(in srgb,${MARKER} 45%,transparent) }
+.dsa-svc .dot { box-shadow:none; width:6px; height:6px }
+.dsa-svc .copy span { margin-top:3px }
+.dsa-svc .go { opacity:.65 }
+.dsa-openrow { padding:12px; gap:8px }
+.dsa-openrow input, .dsa-openrow button { height:34px }
+.dsa-hintbox { padding:16px; line-height:1.8 }
+.dsa-help { width:min(290px,calc(100cqw - 24px)); line-height:1.75 }
+.dsa-mini { width:28px; height:28px }
+.dsa-meta b { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px }
+.dsa-notice { padding:9px 12px; font-size:12px; flex-wrap:wrap }
+.dsa-empty { gap:12px; background:var(--dsw-alias-bg-base,#11151b) }
+@container (max-width:380px) { .dsa-width { display:none } .dsa-foot { flex-wrap:wrap } .dsa-foot .dsa-count { margin-left:auto } .dsa-secondary { margin-left:auto } .dsa-bar { padding:8px 6px } }
+@media (prefers-reduced-motion:reduce) { .dsa-col * { transition:none!important; animation:none!important } }
+
 `
 
 function injectStyles(text) {
@@ -190,6 +240,7 @@ const ICONS = {
   locate: 'M12 2v3m0 14v3M2 12h3m14 0h3M12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2z',
   trash: 'M6 7h12l-1 13H7zM9 4h6l1 2H8z',
   external: 'M14 4h6v6h-2V7.4l-7.3 7.3-1.4-1.4L16.6 6H14zM5 6h5v2H7v9h9v-3h2v5H5z',
+  review: 'M5 5.5h14v10H10l-5 4z',
   chevron: 'M7.4 10 12 14.6 16.6 10',
   help: 'M12 4a4 4 0 0 1 4 4c0 2-1.3 2.9-2.3 3.6-.7.5-1 .9-1 1.6v.4h-2v-.6c0-1.5.7-2.3 1.8-3.1.8-.5 1.4-1 1.4-1.9A1.9 1.9 0 0 0 12 6a1.9 1.9 0 0 0-2 1.8H8A3.9 3.9 0 0 1 12 4zm0 12.1a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z',
 }
@@ -212,33 +263,32 @@ function styleSummary(styles) {
 function payloadOf(ann, index) {
   const lines = []
   lines.push('#' + (index + 1) + ' ' + ann.tag + (ann.classes && ann.classes.length ? '.' + ann.classes[0] : '') +
-    (ann.component ? '  组件:' + ann.component : ''))
+    (ann.component ? t('payload.component') + ann.component : ''))
   const anchors = []
   if (ann.role && ann.role !== ann.tag) anchors.push('role=' + ann.role)
   if (ann.ariaLabel) anchors.push('aria-label="' + ann.ariaLabel + '"')
   if (ann.alt) anchors.push('alt="' + ann.alt + '"')
   if (ann.name) anchors.push('name=' + ann.name)
   if (ann.testId) anchors.push(ann.testId)
-  if (anchors.length) lines.push('   语义: ' + anchors.join(' · '))
-  if (ann.componentChain && ann.componentChain.length > 1) lines.push('   组件链: ' + ann.componentChain.join(' > '))
-  lines.push('   选择器: ' + ann.selector +
-    (typeof ann.selectorMatches === 'number' ? '（命中 ' + ann.selectorMatches + ' 个元素）' : ''))
-  lines.push('   位置/尺寸: ' + ann.rect.w + '×' + ann.rect.h + ' @ (' + ann.rect.x + ', ' + ann.rect.y + ')' +
-    (ann.placement ? ' · 视口 ' + ann.placement.zone + '（' + ann.placement.x + '%W × ' + ann.placement.y + '%H）' : ''))
+  if (anchors.length) lines.push(t('payload.semantics') + anchors.join(' · '))
+  if (ann.componentChain && ann.componentChain.length > 1) lines.push(t('payload.componentChain') + ann.componentChain.join(' > '))
+  lines.push(t('payload.selector') + ann.selector +
+    (typeof ann.selectorMatches === 'number' ? t('payload.selectorMatches', { count: ann.selectorMatches }) : ''))
+  lines.push(t('payload.geometry') + ann.rect.w + '×' + ann.rect.h + ' @ (' + ann.rect.x + ', ' + ann.rect.y + ')' +
+    (ann.placement ? t('payload.viewportZone', { zone: ann.placement.zone, x: ann.placement.x, y: ann.placement.y }) : ''))
   const styles = styleSummary(ann.styles)
-  if (styles) lines.push('   当前样式: ' + styles)
-  if (ann.text) lines.push('   文本: ' + ann.text)
-  lines.push('   批注: ' + ann.comment)
+  if (styles) lines.push(t('payload.styles') + styles)
+  if (ann.text) lines.push(t('payload.text') + ann.text)
+  lines.push(t('payload.comment') + ann.comment)
   return lines.join('\n')
 }
 
 function payloadBlock(annotations, page, viewport) {
   if (!annotations.length) return ''
-  const head = '🎯 界面标注 · ' + page + ' · 视口 ' + viewport.w + '×' + viewport.h + '（' + annotations.length + ' 条）'
+  const head = t('payload.head', { page: page, w: viewport.w, h: viewport.h, count: annotations.length })
   return head + '\n' + annotations.map((ann, i) => payloadOf(ann, i)).join('\n\n')
 }
 
-const encodeTarget = (origin) => btoa(origin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 
 /** Accept what people actually type: `5173`, `:5173`, `localhost:3000/x`, a URL. */
 function normalizeAddress(text) {
@@ -312,13 +362,14 @@ function apply(ctx) {
           helpOpen: false,
           listOpen: false,
           sending: false,
-          cors: false,
+          loading: false,
+          error: null,
+          previewOrigin: '',
+          width: 'fit',
           pending: [],
           notice: null,
-          proxyPrefix: '/__dsh_anno',
-          command: null,
-          log: [],
           root: '',
+          lang: i18n.lang,
         }),
         draftWriter: null,
         noticeTimer: null,
@@ -333,6 +384,7 @@ function apply(ctx) {
       const res = await fetch('/__dsh-annotate/api', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(20000),
         body: JSON.stringify({ method: method, args: args || {} }),
       })
       return await res.json()
@@ -344,14 +396,30 @@ function apply(ctx) {
   let frameRef = null
   let activePanel = null
 
-  const notify = (type, payload) => {
-    const frame = frameRef
+  const notify = (type, payload, panel = activePanel) => {
+    const frame = panel?.frame || frameRef
     if (!frame || !frame.contentWindow) return
+    // Messages carry the annotation payload, so they are addressed to the
+    // preview origin rather than broadcast to '*'.
+    let target = panel?.model?.get?.().previewOrigin || ''
+    if (!target) {
+      try { target = new URL(frame.src).origin } catch (error) { void error }
+    }
+    if (!target) return
     try {
-      frame.contentWindow.postMessage(Object.assign({ source: CHANNEL_OUT, type: type }, payload || {}), '*')
+      frame.contentWindow.postMessage(Object.assign({ source: CHANNEL_OUT, type: type }, payload || {}), target)
     } catch (error) {
       void error
     }
+  }
+
+  /** Language is a per-user preference, not per-panel: switching it re-renders
+   *  this panel and tells the injected overlay to follow. */
+  const switchLanguage = (panel) => {
+    const next = i18n.toggle()
+    try { localStorage.setItem(LANG_KEY, next) } catch (error) { void error }
+    panel.model.set({ lang: next, helpOpen: false })
+    notify('lang', { lang: next }, panel)
   }
 
   const openAnnotate = () => {
@@ -359,58 +427,77 @@ function apply(ctx) {
       if (sidebarRight && typeof sidebarRight.openTab === 'function') sidebarRight.openTab(KIND)
     } catch (error) {
       console.warn('dsh-annotate: could not open the sidebar tab', error)
+      document.querySelector('.dsa-global-notice')?.remove()
+      const notice = document.createElement('div')
+      notice.className = 'dsa-global-notice'
+      notice.setAttribute('role', 'status')
+      notice.textContent = t('panel.noSession')
+      document.body.appendChild(notice)
+      setTimeout(() => notice.remove(), 6000)
     }
   }
 
   const flash = (panel, message) => {
-    panel.model.set({ notice: message })
+    // A toast replaces any previous one, so the undo affordance it carried must
+    // go with it.
+    panel.model.set({ notice: message, undoAvailable: false })
     if (panel.noticeTimer) clearTimeout(panel.noticeTimer)
     panel.noticeTimer = setTimeout(() => panel.model.set({ notice: null }), 6000)
   }
 
-  const proxyUrlFor = (panel, upstreamUrl) => {
-    const url = new URL(upstreamUrl)
-    const prefix = panel.model.get().proxyPrefix || '/__dsh_anno'
-    return location.origin + prefix + '/' + encodeTarget(url.origin) + url.pathname + url.search + url.hash
-  }
-
   /** Open a page: harness-origin URLs load directly, everything else through the
    *  loopback proxy (which is what makes its DOM readable). */
-  const openUpstream = (panel, raw, options) => {
+  const openUpstream = async (panel, raw, options) => {
     const push = !options || options.push !== false
     const url = normalizeAddress(raw)
     if (!url) {
-      flash(panel, '这个地址看不出来是什么，试试 localhost:5173 或直接输 5173')
+      flash(panel, t('notice.badAddress'))
       return false
     }
     const parsed = new URL(url)
-    const direct = parsed.origin === location.origin
+    if (!isLoopback(parsed.hostname) || parsed.origin === location.origin) {
+      flash(panel, t('notice.notLocal'))
+      return false
+    }
+    const request = (panel.openRequest || 0) + 1
+    panel.openRequest = request
+    panel.model.set({ loading: true, error: null, view: 'page', input: url })
+    const preview = await api('preview', { sid: panel.sid, url })
+    if (panel.openRequest !== request) return false
+    if (!preview.ok) {
+      panel.model.set({ loading: false, error: hostMessage(preview, 'notice.previewFailed') })
+      return false
+    }
     const state = panel.model.get()
-    const history = push ? state.history.slice(0, state.index + 1).concat([url]) : state.history
+    const history = state.previewOrigin !== preview.origin ? [url] : push ? state.history.slice(0, state.index + 1).concat([url]) : state.history
     panel.model.set({
       view: 'page',
       url: url,
       input: url,
-      src: direct ? url : proxyUrlFor(panel, url),
+      src: preview.url,
+      previewOrigin: preview.origin,
       history: history.slice(-40),
       index: Math.min(history.length - 1, 39),
       mode: 'idle',
-      cors: false,
-      annotations: state.url === url ? state.annotations : [],
+      annotations: readAnnotations(panel, url),
       page: parsed.pathname,
-      notice: isLoopback(parsed.hostname) ? null : '非本地地址：代理只是尽力而为（登录态与严格 CSP 可能失效）',
+      notice: null,
     })
+    if (state.src === preview.url) notify('ping')
     return true
   }
 
   const runDetect = async (panel, options) => {
     const auto = !options || options.auto !== false
-    const state = panel.model.get()
+    // Check and claim the busy flag in that order: reading it after setting it
+    // would make the re-entrancy guard a no-op.
+    if (panel.model.get().detect === 'busy') return
     panel.model.set({ detect: 'busy' })
-    const res = await api('detect', { sid: panel.sid, root: state.root })
+    const state = panel.model.get()
+    const res = await api('detect', { sid: panel.sid, root: state.root, force: options?.force })
     if (!res || !res.ok) {
       panel.model.set({ detect: 'error' })
-      flash(panel, '检测失败：' + ((res && res.error) || '未知错误'))
+      flash(panel, t('notice.detectFailed', { error: hostMessage(res, 'notice.unknownError') }))
       return
     }
     panel.model.set({
@@ -420,123 +507,71 @@ function apply(ctx) {
       detect: 'idle',
     })
     const current = panel.model.get()
-    if (auto && !current.url && (res.services || []).length === 1) {
+    if (auto && current.view === 'list' && !current.url && (res.services || []).length === 1) {
       openUpstream(panel, res.services[0].url, { push: true })
-      flash(panel, '检测到 1 个本地服务，已自动打开')
+      flash(panel, t('notice.autoOpened'))
     }
   }
 
-  const injectOverlay = (iframe, panel) => {
-    let doc = null
-    try {
-      doc = iframe.contentDocument
-    } catch (error) {
-      doc = null
-    }
-    if (!doc) {
-      panel.model.set({ cors: true })
-      return
-    }
-    panel.model.set({ cors: false })
-    if (doc.getElementById('dsh-annotate-overlay')) return
-    const script = doc.createElement('script')
-    script.id = 'dsh-annotate-overlay'
-    script.textContent = OVERLAY_SRC
-    ;(doc.head || doc.documentElement).appendChild(script)
-    notify('ping')
+  const annotationKey = (panel, url) => 'dsh-review:v2:' + encodeURIComponent(panel.sid) + ':' + encodeURIComponent(url)
+  const readAnnotations = (panel, url) => {
+    try { const value = JSON.parse(localStorage.getItem(annotationKey(panel, url)) || '[]'); return Array.isArray(value) ? value : [] } catch { return [] }
   }
-
-  const composerEditable = () =>
-    document.querySelector('[contenteditable="true"][role="textbox"]') || document.querySelector('[contenteditable="true"]')
-
-  const composerText = () => {
-    const editable = composerEditable()
-    return editable ? String(editable.innerText || '') : ''
+  const writeAnnotations = (panel, url, annotations) => {
+    try { localStorage.setItem(annotationKey(panel, url), JSON.stringify(annotations)) }
+    catch { flash(panel, t('notice.storageUnavailable')) }
   }
-
-  /** Press the composer's own send button — the same affordance the reader
-   *  would use. `aria-label` is localized, so the primary-button class is the
-   *  stable hook; the button is found by walking up from the editable to the
-   *  nearest ancestor that contains one. */
-  const submitComposer = () => {
-    const editable = composerEditable()
-    const isSend = (el) =>
-      el.tagName === 'BUTTON' &&
-      !el.disabled &&
-      el.offsetParent !== null &&
-      (el.getAttribute('aria-label') === 'Send message' || /_primary\b/.test(String(el.className)))
-
-    if (editable) {
-      let node = editable
-      for (let depth = 0; depth < 7 && node; depth += 1) {
-        const button = [...node.querySelectorAll('button')].find(isSend)
-        if (button) {
-          button.click()
-          return 'click'
-        }
-        node = node.parentElement
-      }
-    }
-    const anywhere = [...document.querySelectorAll('button')].find(isSend)
-    if (anywhere) {
-      anywhere.click()
-      return 'click'
-    }
-    if (editable) {
-      // Last resort: the harness' Enter gesture.
-      for (const type of ['keydown', 'keypress', 'keyup']) {
-        editable.dispatchEvent(
-          new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true })
-        )
-      }
-      return 'enter'
-    }
-    return null
-  }
-
   const sendAll = async (panel, setDraft, options) => {
-    const submit = !options || options.submit !== false
     const state = panel.model.get()
-    if (!state.annotations.length) return false
-    const writer = setDraft || (panel.draftWriter && panel.draftWriter.setDraft)
-    if (!writer) {
-      flash(panel, '还没找到输入框：先切到一个有输入框的会话，再点这里发送标注。')
-      return false
+    if (!state.annotations.length || state.sending) return false
+    if (state.mode === 'writing') { flash(panel, t('notice.finishEditing')); return false }
+    const submit = !options || options.submit !== false
+    const block = payloadBlock(state.annotations, state.url, state.viewport)
+    const ids = state.annotations.map((ann) => ann.id)
+    const clearAccepted = () => {
+      const stored = readAnnotations(panel, state.url)
+      const accepted = stored.filter((ann) => state.annotations.some((sent) => sent.id === ann.id && sent.comment === ann.comment))
+      const acceptedIds = accepted.map((ann) => ann.id)
+      const remaining = stored.filter((ann) => !acceptedIds.includes(ann.id))
+      writeAnnotations(panel, state.url, remaining)
+      if (panel.model.get().url === state.url) {
+        panel.model.set({ annotations: remaining, mode: 'idle', listOpen: remaining.length ? panel.model.get().listOpen : false })
+        if (activePanel === panel) notify('clear', { ids: acceptedIds })
+      }
     }
-    // The page identity that matters is the upstream one, never the proxy path.
-    const block = payloadBlock(state.annotations, state.url || state.page, state.viewport || { w: 0, h: 0 })
-    const count = state.annotations.length
-    const current = String((panel.draftWriter && panel.draftWriter.draft) || '')
-    const next = (current ? current.replace(/\s+$/, '') + '\n\n' : '') + block
-    writer(next)
-    if (panel.draftWriter) panel.draftWriter.draft = next
-    panel.model.set({ annotations: [], mode: 'idle', notice: null, helpOpen: false })
-    notify('clear')
-
     if (!submit) {
-      // ⌥/Alt+click: leave it in the composer so the reader can add context.
-      panel.model.set({
-        pending: state.pending.concat([{ id: 'p' + Date.now().toString(36), count: count, payload: block }]),
-      })
-      flash(panel, '已填入输入框（' + count + ' 条），补充完自行发送')
+      const writer = setDraft || panel.draftWriter?.setDraft
+      if (!writer) { flash(panel, t('notice.noComposer')); return false }
+      const current = String(panel.draftWriter?.draft || '')
+      const next = current.includes(block) ? current : (current ? current.trimEnd() + '\n\n' : '') + block
+      try { writer(next) } catch { flash(panel, t('notice.attachFailed')); return false }
+      if (panel.draftWriter) panel.draftWriter.draft = next
+      panel.model.set({ pending: state.pending.concat([{ id: crypto.randomUUID(), count: ids.length, payload: block }]) })
+      clearAccepted()
+      flash(panel, t('notice.attached'))
       return true
     }
-
+    // Use the session-addressed public controller and its admission receipt.
+    // Existing composer drafts and attachments are deliberately untouched.
+    const sessions = ctx.get('sessions')
+    const scope = sessions?.scope?.(panel.sid)
+    const session = scope && sessions.sessionOf(scope)
+    if (!session?.prompt) { flash(panel, t('notice.sendUnsupported')); return false }
     panel.model.set({ sending: true })
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    const how = submitComposer()
-    await new Promise((resolve) => setTimeout(resolve, 700))
-    const left = composerText()
-    panel.model.set({ sending: false })
-    if (how && !left.includes('界面标注')) {
-      flash(panel, '已发送 ' + count + ' 条标注')
+    notify('busy', { value: true }, panel)
+    let submission
+    try {
+      submission = session.beginSubmission({ mode: 'queue', text: block, attachments: [] })
+      const result = await session.prompt([{ type: 'text', text: block }], 'queue', undefined, submission.requestId)
+      if (!result?.ok || !result.value?.accepted) throw new Error(result?.error?.message || t('notice.notAccepted'))
+      clearAccepted()
+      flash(panel, t('notice.accepted', { count: ids.length }))
       return true
-    }
-    panel.model.set({
-      pending: state.pending.concat([{ id: 'p' + Date.now().toString(36), count: count, payload: block }]),
-    })
-    flash(panel, '已填入输入框，但没能自动发送：点输入框旁的发送按钮即可')
-    return false
+    } catch (error) {
+      submission?.abandon()
+      flash(panel, t('notice.sendFailed', { error: String(error.message || error) }))
+      return false
+    } finally { panel.model.set({ sending: false }); if (panel.frame) notify('busy', { value: false }, panel) }
   }
 
     // --------------------------------------------------------------- tab body
@@ -564,12 +599,8 @@ function apply(ctx) {
       let cancelled = false
       void (async () => {
         const hostState = await api('state', { sid: sessionId })
-        if (cancelled || !hostState || !hostState.ok) return
-        panel.model.set({
-          proxyPrefix: hostState.proxyPrefix || panel.model.get().proxyPrefix,
-          command: hostState.command || null,
-          log: hostState.log || [],
-        })
+        if (cancelled) return
+        if (!hostState?.ok) { panel.model.set({ detect: 'error' }); flash(panel, t('notice.pluginUnavailable')); return }
         if (!panel.model.get().url) await runDetect(panel, { auto: true })
       })()
       return () => {
@@ -581,9 +612,21 @@ function apply(ctx) {
       panel.draftWriter = {
         sessionId: sessionId,
         draft: draft,
-        setDraft: (value) => inputActions && inputActions.setDraft(value),
+        setDraft: inputActions?.setDraft ? (value) => inputActions.setDraft(value) : null,
       }
     }, [panel, sessionId, draft, inputActions])
+
+    React.useEffect(() => {
+      if (state.view !== 'list') return undefined
+      const timer = setInterval(() => { if (!document.hidden) void runDetect(panel, { auto: false }) }, 5000)
+      return () => clearInterval(timer)
+    }, [panel, state.view])
+    React.useEffect(() => {
+      if (!state.loading) return undefined
+      const timer = setTimeout(() => panel.model.set({ loading: false, error: t('notice.loadTimeout') }), 18000)
+      return () => clearTimeout(timer)
+    }, [panel, state.loading, state.src])
+    React.useEffect(() => () => { if (activePanel === panel) activePanel = null }, [panel])
 
     React.useEffect(() => {
       if (!state.helpOpen) return undefined
@@ -598,19 +641,35 @@ function apply(ctx) {
     React.useEffect(() => {
       const onMessage = (event) => {
         const frame = frameRef
-        if (!frame || event.source !== frame.contentWindow) return
+        if (!frame || event.source !== frame.contentWindow || event.origin !== panel.model.get().previewOrigin) return
         const data = event.data
         if (!data) return
         if (data.source === CHANNEL_IN) {
           if (data.type === 'ready' || data.type === 'changed') {
             const current = panel.model.get()
+            const pageUrl = data.url || current.url
+            if (data.type === 'ready') {
+              let draft = null
+              try { draft = JSON.parse(localStorage.getItem(annotationKey(panel, pageUrl) + ':draft') || 'null') } catch {}
+              notify('restore', { annotations: readAnnotations(panel, pageUrl), draft })
+            }
+            else writeAnnotations(panel, pageUrl, data.annotations || [])
+            const nextAnnotations = data.type === 'ready' ? readAnnotations(panel, pageUrl) : data.annotations || []
             panel.model.set({
-              annotations: data.annotations || [],
+              loading: false,
+              error: null,
+              mode: data.type === 'ready' ? 'idle' : current.mode,
+              annotations: nextAnnotations,
+              listOpen: nextAnnotations.length ? current.listOpen : false,
               viewport: data.viewport || current.viewport,
               // The overlay reports the proxied path; the upstream URL is the
               // one worth keeping, so only fill in when we have nothing.
               page: current.url ? current.page : data.path || current.page,
             })
+          } else if (data.type === 'draft') {
+            try { localStorage.setItem(annotationKey(panel, data.url || panel.model.get().url) + ':draft', JSON.stringify(data.draft)) } catch { flash(panel, t('notice.draftUnavailable')) }
+          } else if (data.type === 'warning' || data.type === 'missing') {
+            flash(panel, data.message || t('notice.elementGone'))
           } else if (data.type === 'mode') {
             panel.model.set({ mode: data.mode })
           } else if (data.type === 'send') {
@@ -618,12 +677,16 @@ function apply(ctx) {
           }
           return
         }
+        if (data.source === PAGE_CHANNEL && data.type === 'error') { panel.model.set({ loading: false, error: hostMessage({ code: data.code, error: data.message }, 'notice.previewFailed') }); return }
         if (data.source === PAGE_CHANNEL && data.type === 'navigated' && data.url) {
           // SPA route change: follow it in the address bar and remember it.
           const current = panel.model.get()
           if (data.url === current.url) return
-          const history = current.history.slice(0, current.index + 1).concat([data.url])
-          panel.model.set({ url: data.url, input: data.url, history: history.slice(-40), index: Math.min(history.length - 1, 39) })
+          const expected = panel.historyTarget
+          const isTraversal = expected !== undefined && current.history[expected] === data.url
+          const history = isTraversal ? current.history : current.history.slice(0, current.index + 1).concat([data.url])
+          panel.historyTarget = undefined
+          panel.model.set({ url: data.url, input: data.url, history: history.slice(-40), index: isTraversal ? expected : Math.min(history.length - 1, 39), annotations: readAnnotations(panel, data.url), mode: 'idle', listOpen: false })
         }
       }
       window.addEventListener('message', onMessage)
@@ -634,34 +697,24 @@ function apply(ctx) {
       const current = panel.model.get()
       const index = current.index + delta
       if (index < 0 || index >= current.history.length) return
-      const url = current.history[index]
-      panel.model.set({ index: index, url: url, input: url, src: proxyUrlFor(panel, url), mode: 'idle' })
+      panel.historyTarget = index
+      notify('navigate', { delta })
     }
 
-    const reload = () => {
-      const frame = frameRef
-      if (frame && frame.contentWindow) {
-        try {
-          frame.contentWindow.location.reload()
-          return
-        } catch (error) {
-          void error
-        }
-      }
-      panel.model.set({ src: panel.model.get().src })
-    }
+    const reload = () => { panel.model.set({ loading: true, error: null }); notify('reload') }
 
-    const copy = (text) => {
+    const copy = async (text) => {
       try {
-        void navigator.clipboard.writeText(text)
-        flash(panel, '已复制：' + text)
+        await navigator.clipboard.writeText(text)
+        flash(panel, t('list.copied', { text: text }))
       } catch (error) {
         void error
       }
     }
 
     const showList = () => {
-      panel.model.set({ view: 'list', mode: 'idle', notice: null })
+      panel.model.set({ view: 'list', mode: 'idle', notice: null, loading: false, error: null, listOpen: false, helpOpen: false })
+      panel.openRequest = (panel.openRequest || 0) + 1
       notify('set-mode', { mode: 'idle' })
       void runDetect(panel, { auto: false })
     }
@@ -675,9 +728,10 @@ function apply(ctx) {
     const notice = state.notice
       ? React.createElement(
           'div',
-          { className: 'dsa-notice' },
+          { className: 'dsa-notice', role: 'status', 'aria-live': 'polite' },
           state.notice,
-          React.createElement('button', { type: 'button', title: '知道了', onClick: () => panel.model.set({ notice: null }) }, '✕')
+          state.undoAvailable ? React.createElement('button', { type: 'button', onClick: () => { notify('undo'); panel.model.set({ undoAvailable: false, notice: null }) } }, t('notice.undo')) : null,
+          React.createElement('button', { type: 'button', title: t('notice.dismiss'), onClick: () => panel.model.set({ notice: null }) }, '✕')
         )
       : null
 
@@ -698,13 +752,13 @@ function apply(ctx) {
             'div',
             { className: 'dsa-sechead' },
             state.detect === 'busy'
-              ? '正在检测本地服务…'
+              ? t('list.detecting')
               : services.length
-                ? '检测到 ' + services.length + ' 个本地服务'
-                : '没有检测到本地服务',
+                ? t('list.detected', { count: services.length })
+                : t('list.none'),
             React.createElement(
               'button',
-              { className: 'dsa-ico', type: 'button', title: '重新检测', disabled: state.detect === 'busy', onClick: () => void runDetect(panel, { auto: false }) },
+              { className: 'dsa-ico', type: 'button', title: t('list.redetect'), disabled: state.detect === 'busy', onClick: () => void runDetect(panel, { auto: false }) },
               React.createElement(Icon, { name: 'refresh' })
             )
           ),
@@ -719,23 +773,23 @@ function apply(ctx) {
                 React.createElement('b', null, service.title || service.url),
                 React.createElement('span', null, service.url)
               ),
-              React.createElement('span', { className: 'go' }, '打开 →')
+              React.createElement('span', { className: 'go' }, t('list.open'))
             )
           ),
           !services.length && state.detect !== 'busy'
             ? React.createElement(
                 'div',
                 { className: 'dsa-hintbox' },
-                React.createElement('p', null, '没有正在运行的本地 web（已扫 ' + (state.scanned || 0) + ' 个端口）。先把它跑起来，再点刷新：'),
+                React.createElement('p', null, t('list.emptyHint', { count: state.scanned || 0 })),
                 commands.map((entry) =>
                   React.createElement(
                     'div',
                     { className: 'dsa-cmd', key: entry.command },
                     React.createElement('code', null, entry.command),
-                    React.createElement('button', { type: 'button', onClick: () => copy(entry.command) }, '复制')
+                    React.createElement('button', { type: 'button', onClick: () => copy(entry.command) }, t('list.copy'))
                   )
                 ),
-                React.createElement('p', { style: { marginTop: '10px' } }, '跑起来后这里会自动出现，点一下就能标注。')
+                React.createElement('p', { style: { marginTop: '10px' } }, t('list.autoRefresh'))
               )
             : null
         ),
@@ -745,13 +799,14 @@ function apply(ctx) {
           React.createElement('input', {
             value: state.input,
             spellCheck: false,
-            placeholder: '5173 或 localhost:3000',
+            placeholder: t('list.placeholder'),
+            'aria-label': t('list.addressLabel'),
             onChange: (event) => panel.model.set({ input: event.target.value }),
             onKeyDown: (event) => {
-              if (event.key === 'Enter') openUpstream(panel, event.target.value)
+              if (event.key === 'Enter' && !event.nativeEvent?.isComposing) openUpstream(panel, event.target.value)
             },
           }),
-          React.createElement('button', { type: 'button', onClick: () => openUpstream(panel, state.input) }, '打开')
+          React.createElement('button', { type: 'button', onClick: () => openUpstream(panel, state.input) }, t('list.openButton'))
         )
       )
     }
@@ -763,20 +818,41 @@ function apply(ctx) {
       React.createElement(
         'div',
         { className: 'dsa-bar' },
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '后退', disabled: state.index <= 0, onClick: () => go(-1) }, React.createElement(Icon, { name: 'back' })),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '前进', disabled: state.index >= state.history.length - 1, onClick: () => go(1) }, React.createElement(Icon, { name: 'forward' })),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '重新载入', onClick: reload }, React.createElement(Icon, { name: 'refresh' })),
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: t('page.back'), disabled: state.index <= 0, onClick: () => go(-1) }, React.createElement(Icon, { name: 'back' })),
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: t('page.forward'), disabled: state.index >= state.history.length - 1, onClick: () => go(1) }, React.createElement(Icon, { name: 'forward' })),
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: t('page.reload'), onClick: reload }, React.createElement(Icon, { name: 'refresh' })),
         React.createElement('input', {
           className: 'dsa-url',
           value: state.input,
           spellCheck: false,
-          placeholder: '地址',
+          placeholder: t('page.addressPlaceholder'),
+          'aria-label': t('list.addressLabel'),
           onChange: (event) => panel.model.set({ input: event.target.value }),
           onKeyDown: (event) => {
-            if (event.key === 'Enter') openUpstream(panel, event.target.value)
+            if (event.key === 'Enter' && !event.nativeEvent?.isComposing) openUpstream(panel, event.target.value)
           },
         }),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '回到本地服务列表', onClick: showList }, React.createElement(Icon, { name: 'list' })),
+        React.createElement('select', { className: 'dsa-width', 'aria-label': t('page.widthLabel'), value: state.width, onChange: (event) => panel.model.set({ width: event.target.value }) },
+          React.createElement('option', { value: 'fit' }, t('page.widthFit')), React.createElement('option', { value: '390' }, t('page.widthMobile'))),
+        React.createElement(
+          'button',
+          {
+            className: 'dsa-ico dsa-review-toggle',
+            type: 'button',
+            'data-on': state.listOpen ? 'true' : 'false',
+            'aria-expanded': state.listOpen,
+            'aria-controls': 'dsa-review-panel-' + sessionId,
+            'aria-label': annotations.length ? t('page.listToggleLabel', { count: annotations.length }) : t('page.listToggleEmpty'),
+            disabled: !annotations.length,
+            title: annotations.length
+              ? state.listOpen ? t('page.listCollapse') : t('page.listExpand')
+              : t('page.listEmpty'),
+            onClick: () => panel.model.set({ listOpen: !state.listOpen, helpOpen: false }),
+          },
+          React.createElement(Icon, { name: 'review' }),
+          annotations.length ? React.createElement('span', { className: 'dsa-review-badge' }, annotations.length > 99 ? '99+' : String(annotations.length)) : null
+        ),
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: t('page.backToList'), onClick: showList }, React.createElement(Icon, { name: 'list' })),
         React.createElement(
           'span',
           { className: 'dsa-helpwrap' },
@@ -786,8 +862,8 @@ function apply(ctx) {
               className: 'dsa-ico',
               type: 'button',
               'data-on': state.helpOpen ? 'true' : 'false',
-              title: '怎么用',
-              onClick: () => panel.model.set({ helpOpen: !state.helpOpen }),
+              title: t('page.help'),
+              onClick: () => panel.model.set({ helpOpen: !state.helpOpen, listOpen: false }),
             },
             React.createElement(Icon, { name: 'help' })
           ),
@@ -795,102 +871,91 @@ function apply(ctx) {
             ? React.createElement(
                 'div',
                 { className: 'dsa-help' },
-                React.createElement('b', null, '在预览里标注'),
-                React.createElement('p', null, '点下面「标记」，然后点页面里的元素写批注，Enter 保存。'),
-                React.createElement('p', null, 'Esc 退出标注状态（换页面、滚动都不受影响，随时再点「标记」继续）。'),
-                React.createElement('p', null, '⌘/Ctrl+点击元素 = 写完立即发送。'),
-                React.createElement('b', null, '批注列表与发送'),
-                React.createElement('p', null, '右上角的胶囊是批注列表，点开可逐条定位或删除。'),
-                React.createElement('p', null, '「发送」直接把标注发到对话里；⌥/Alt+点击「发送」则只填入输入框，方便你先补充几句。')
+                React.createElement('b', null, t('list.helpHeader')),
+                React.createElement('p', null, t('list.helpPicking')),
+                React.createElement('p', null, t('list.helpEscape')),
+                React.createElement('p', null, t('list.helpCmdClick')),
+                React.createElement('b', null, t('list.helpSendHeader')),
+                React.createElement('p', null, t('list.helpSendList')),
+                React.createElement('p', null, t('list.helpSendActions'))
               )
             : null
+        ),
+        React.createElement(
+          'button',
+          {
+            className: 'dsa-ico dsa-lang',
+            type: 'button',
+            title: t('panel.languageSwitch', { lang: i18n.nextLabel() }),
+            'aria-label': t('panel.language'),
+            onClick: () => switchLanguage(panel),
+          },
+          i18n.label()
         )
       ),
+      annotations.length && state.listOpen
+        ? React.createElement(
+            'div',
+            {
+              className: 'dsa-review-panel',
+              id: 'dsa-review-panel-' + sessionId,
+              role: 'region',
+              'aria-label': t('page.listAria'),
+            },
+            annotations.map((ann, index) =>
+              React.createElement(
+                'div',
+                { className: 'dsa-item', key: ann.id },
+                React.createElement('div', { className: 'dsa-idx' }, String(index + 1)),
+                React.createElement(
+                  'div',
+                  { className: 'dsa-body' },
+                  React.createElement(
+                    'div',
+                    { className: 'dsa-meta' },
+                    React.createElement('b', null, ann.tag + (ann.classes && ann.classes.length ? '.' + ann.classes[0] : '')),
+                    ann.component ? React.createElement('span', null, ann.component) : null,
+                    React.createElement('span', null, ann.rect.w + '×' + ann.rect.h)
+                  ),
+                  React.createElement('div', { className: 'dsa-sel' }, ann.selector),
+                  React.createElement('div', { className: 'dsa-comment' }, ann.comment)
+                ),
+                React.createElement(
+                  'div',
+                  { className: 'dsa-acts' },
+                  React.createElement('button', { className: 'dsa-mini', type: 'button', title: t('page.locate'), onClick: () => notify('focus', { id: ann.id }) }, React.createElement(Icon, { name: 'locate' })),
+                  React.createElement('button', { className: 'dsa-mini', type: 'button', 'data-danger': 'true', title: t('page.delete'), onClick: () => { notify('remove', { id: ann.id }); panel.model.set({ undoAvailable: true }); flash(panel, t('notice.deleted')) } }, React.createElement(Icon, { name: 'trash' }))
+                )
+              )
+            )
+          )
+        : null,
       React.createElement(
         'div',
         { className: 'dsa-stage' },
-        React.createElement('iframe', {
+        state.src ? React.createElement('iframe', {
           className: 'dsa-frame',
-          key: state.src,
+          key: state.previewOrigin,
+          style: state.width === 'fit' ? undefined : { width: state.width + 'px', maxWidth: '100%', margin: '0 auto' },
           src: state.src,
-          title: '预览',
+          title: t('page.previewTitle'),
           sandbox: 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals',
           ref: (el) => {
             frameRef = el
+            panel.frame = el
           },
-          onLoad: (event) => {
-            injectOverlay(event.currentTarget, panel)
-            try {
-              const reported = event.currentTarget.contentWindow.__dshAnnoState
-                ? event.currentTarget.contentWindow.__dshAnnoState()
-                : null
-              if (reported && reported.url && reported.url !== panel.model.get().url) {
-                panel.model.set({ url: reported.url, input: reported.url, page: new URL(reported.url).pathname })
-              }
-            } catch (error) {
-              void error
-            }
-          },
-        }),
-        state.cors
+          onLoad: () => { notify('ping'); notify('lang', { lang: i18n.lang }) },
+        }) : null,
+        (state.error || state.loading)
           ? React.createElement(
               'div',
               { className: 'dsa-empty' },
-              React.createElement('h4', null, '这个页面读不到 DOM，标注层注入不进去'),
-              React.createElement('p', null, '跨源页面无法标注。回到列表选一个本地服务（本地服务会自动经同源代理打开）。')
+              React.createElement('h4', null, state.error ? t('page.unavailable') : t('page.loading')),
+              React.createElement('p', null, state.error || t('page.loadingHint')),
+              state.error ? React.createElement('button', { className: 'dsa-send', type: 'button', onClick: () => openUpstream(panel, state.input) }, t('page.retry')) : null
             )
           : null,
-        React.createElement('div', { className: 'dsa-stagefoot' }, React.createElement('i'), React.createElement('span', null, state.url)),
-        annotations.length
-          ? React.createElement(
-              'div',
-              { className: 'dsa-ovlist', 'data-open': state.listOpen ? 'true' : 'false' },
-              React.createElement(
-                'button',
-                {
-                  className: 'dsa-ovhead',
-                  type: 'button',
-                  title: state.listOpen ? '收起批注列表' : '展开批注列表',
-                  onClick: () => panel.model.set({ listOpen: !state.listOpen }),
-                },
-                React.createElement('b', null, String(annotations.length)),
-                React.createElement('span', null, '条批注'),
-                React.createElement(Icon, { name: 'chevron' })
-              ),
-              state.listOpen
-                ? React.createElement(
-                    'div',
-                    { className: 'dsa-ovitems' },
-                    annotations.map((ann, index) =>
-                      React.createElement(
-                        'div',
-                        { className: 'dsa-item', key: ann.id },
-                        React.createElement('div', { className: 'dsa-idx' }, String(index + 1)),
-                        React.createElement(
-                          'div',
-                          { className: 'dsa-body' },
-                          React.createElement(
-                            'div',
-                            { className: 'dsa-meta' },
-                            React.createElement('b', null, ann.tag + (ann.classes && ann.classes.length ? '.' + ann.classes[0] : '')),
-                            ann.component ? React.createElement('span', null, ann.component) : null,
-                            React.createElement('span', null, ann.rect.w + '×' + ann.rect.h)
-                          ),
-                          React.createElement('div', { className: 'dsa-sel' }, ann.selector),
-                          React.createElement('div', { className: 'dsa-comment' }, ann.comment)
-                        ),
-                        React.createElement(
-                          'div',
-                          { className: 'dsa-acts' },
-                          React.createElement('button', { className: 'dsa-mini', type: 'button', title: '在预览里定位', onClick: () => notify('focus', { id: ann.id }) }, React.createElement(Icon, { name: 'locate' })),
-                          React.createElement('button', { className: 'dsa-mini', type: 'button', 'data-danger': 'true', title: '删除这条标注', onClick: () => notify('remove', { id: ann.id }) }, React.createElement(Icon, { name: 'trash' }))
-                        )
-                      )
-                    )
-                  )
-                : null
-            )
-          : null
+        React.createElement('div', { className: 'dsa-stagefoot' }, React.createElement('i'), React.createElement('span', null, state.url))
       ),
       React.createElement(
         'div',
@@ -901,23 +966,26 @@ function apply(ctx) {
             className: 'dsa-ico',
             type: 'button',
             'data-on': state.mode === 'picking' ? 'true' : 'false',
-            title: '标记模式：点击元素写批注（Esc 退出）',
+            title: t('page.markTitle'),
+            'aria-pressed': state.mode !== 'idle',
+            disabled: state.loading || !!state.error || state.sending,
             onClick: toggleMode,
           },
-          React.createElement(Icon, { name: 'marker' })
+          React.createElement(Icon, { name: 'marker' }), React.createElement('span', null, state.mode === 'idle' ? t('page.mark') : t('page.marking'))
         ),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '在系统浏览器打开', onClick: () => window.open(state.url, '_blank', 'noopener') }, React.createElement(Icon, { name: 'external' })),
-        React.createElement('span', { className: 'dsa-count' }, annotations.length ? annotations.length + ' 条' : ''),
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: t('page.openExternal'), onClick: () => window.open(state.url, '_blank', 'noopener') }, React.createElement(Icon, { name: 'external' })),
+        React.createElement('span', { className: 'dsa-count' }, annotations.length ? t('page.unit', { count: annotations.length }) : ''),
+        React.createElement('button', { className: 'dsa-secondary', type: 'button', disabled: !annotations.length || state.sending, onClick: () => sendAll(panel, inputActions?.setDraft, { submit: false }) }, t('page.attach')),
         React.createElement(
           'button',
           {
             className: 'dsa-send',
             type: 'button',
-            disabled: !annotations.length,
-            title: '发送给 AI（⌥/Alt+点击 = 只填入输入框）',
+            disabled: !annotations.length || state.sending,
+            title: t('page.sendHint'),
             onClick: (event) => sendAll(panel, inputActions && inputActions.setDraft, { submit: !(event.altKey || event.metaKey) }),
           },
-          state.sending ? '发送中…' : '发送'
+          state.sending ? t('page.sending') : t('page.send')
         )
       ),
     )
@@ -935,11 +1003,11 @@ function apply(ctx) {
         className: 'dsa-open',
         type: 'button',
         'data-count': count > 0 ? 'true' : 'false',
-        title: '界面标注（⌘⇧B）：列出本地在跑的服务，点开就能标注',
+        title: t('panel.headerTitle'),
         onClick: openAnnotate,
       },
       React.createElement(Icon, { name: 'marker' }),
-      React.createElement('span', null, count ? '标注 ' + count : '标注')
+      React.createElement('span', null, count ? t('panel.headerLabelCount', { count: count }) : t('panel.headerLabel'))
     )
   }
 
@@ -947,7 +1015,7 @@ function apply(ctx) {
     const panel = getPanel(props.sessionId)
     useSub(panel.model)
     const draft = props.useInput((s) => s.draft)
-    const pending = panel.model.get().pending
+    const pending = panel.model.get().pending.filter((item) => String(draft || '').includes(item.payload))
     if (!pending.length) return null
     return React.createElement(
       'div',
@@ -957,12 +1025,12 @@ function apply(ctx) {
           'span',
           { className: 'dsa-chip', key: item.id },
           React.createElement('span', { className: 'dot' }),
-          '已附 ' + item.count + ' 条标注',
+          t('payload.attached', { count: item.count }),
           React.createElement(
             'button',
             {
               type: 'button',
-              title: '从输入框移除这段标注',
+              title: t('payload.removeOne'),
               onClick: () => {
                 const next = String(draft || '').replace(item.payload, '').replace(/\n{3,}/g, '\n\n').trim()
                 props.inputActions.setDraft(next)
@@ -987,7 +1055,7 @@ function apply(ctx) {
             panel.model.set({ pending: [] })
           },
         },
-        '全部移除'
+        t('payload.removeAll')
       )
     )
   }
@@ -1000,12 +1068,12 @@ function apply(ctx) {
         id: TAB_ID,
         kind: KIND,
         priority: 'extension',
-        title: () => '界面标注',
+        title: () => t('panel.tabTitle'),
         guide: [
           {
             order: 40,
-            title: () => '界面标注',
-            description: () => '检测本地在跑的 web，点开即可圈选元素写批注，一次发给 DeepSeek',
+            title: () => t('panel.tabTitle'),
+            description: () => t('panel.tabDescription'),
             icon: (iconProps) => React.createElement(Icon, Object.assign({ name: 'marker' }, iconProps)),
           },
         ],
@@ -1023,7 +1091,7 @@ function apply(ctx) {
     }
   }
   contribute('sidebar.right.pane.tab', TAB_ID, AnnotateTab, undefined, { key: TAB_ID })
-  contribute('conversation.session.header.utilities', 'annotate-open', HeaderButton, '界面标注')
+  contribute('conversation.session.header.utilities', 'annotate-open', HeaderButton, t('panel.tabTitle'))
   contribute('conversation.input.dock', 'annotate-dock', Dock)
 
   // ⌘⇧B mirrors Codex's in-app browser; ⌘⇧A stays as an alias.
@@ -1046,6 +1114,3 @@ function apply(ctx) {
   window.addEventListener('keydown', onKeyDown)
   ctx.effect(() => () => window.removeEventListener('keydown', onKeyDown))
 }
-
-
-

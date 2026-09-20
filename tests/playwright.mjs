@@ -1,6 +1,6 @@
 /**
  * Playwright is only needed to run these checks, and only from a checkout that
- * installed it (`pnpm install`, or point PLAYWRIGHT_MODULE at another project's
+ * installed it (`npm ci`, or point PLAYWRIGHT_MODULE at another project's
  * install). The plugins themselves depend on nothing.
  */
 export async function loadPlaywright() {
@@ -15,6 +15,6 @@ export async function loadPlaywright() {
     }
   }
   throw new Error(
-    "Playwright not found. Run `pnpm install` in this repo, or set PLAYWRIGHT_MODULE to a project that has it installed."
+    "Playwright not found. Run `npm ci` in this repo, or set PLAYWRIGHT_MODULE to a project that has it installed."
   );
 }
