@@ -55,7 +55,9 @@
     var hair = dark ? 'rgba(255,255,255,.16)' : 'rgba(16,18,22,.14)'
     var fieldBg = dark ? 'rgba(255,255,255,.06)' : 'rgba(16,18,22,.04)'
     return [
-      '.dsa-layer{position:absolute;inset:0;z-index:2147483000;pointer-events:none;',
+      // Viewport-fixed: apps often scroll an inner container, where document
+      // coordinates never change and absolutely-placed pins would sit still.
+      '.dsa-layer{position:fixed;inset:0;z-index:2147483000;pointer-events:none;',
       'font:12px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:' + ink + '}',
       '.dsa-layer *{box-sizing:border-box}',
       '.dsa-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}',
@@ -354,12 +356,10 @@
       return
     }
     var rect = target.getBoundingClientRect()
-    var sx = window.scrollX
-    var sy = window.scrollY
     frame.style.display = 'block'
     frame.setAttribute('data-state', state.selected ? 'selected' : 'hover')
-    frame.style.left = rect.left + sx + 'px'
-    frame.style.top = rect.top + sy + 'px'
+    frame.style.left = rect.left + 'px'
+    frame.style.top = rect.top + 'px'
     frame.style.width = rect.width + 'px'
     frame.style.height = rect.height + 'px'
 
@@ -369,23 +369,26 @@
       (target.getAttribute('class') ? '<span>.' + esc(clip(target.getAttribute('class'), 28).split(' ')[0]) + '</span>' : '') +
       (componentOf(target) ? '<span>· ' + esc(componentOf(target)) + '</span>' : '') +
       '<span>· ' + Math.round(rect.width) + '×' + Math.round(rect.height) + '</span>'
-    var top = rect.top + sy - 26
+    var top = rect.top - 26
     // A pin is anchored to the element's top edge, so a readout directly above
     // it would sit on the marker; lift it clear instead of stacking two labels.
     var annotated = state.annotations.some(function (ann) {
-      return Math.abs(ann.rect.x + ann.rect.w / 2 - (rect.left + rect.width / 2)) < 2 &&
-        Math.abs(ann.rect.y - rect.top) < 2
+      var el = query(ann.selector)
+      if (!el || !el.isConnected) return false
+      var other = el.getBoundingClientRect()
+      return Math.abs(other.left + other.width / 2 - (rect.left + rect.width / 2)) < 2 &&
+        Math.abs(other.top - rect.top) < 2
     })
     if (annotated) top -= 24
-    var left = Math.max(sx + 4, rect.left + sx)
-    if (top < sy + 4) {
+    var left = Math.max(4, rect.left)
+    if (top < 4) {
       // No room above: prefer the element's right side (usually open canvas),
       // and only fall back to below when the right edge is too close too.
       if (window.innerWidth - rect.right > 240) {
-        left = rect.right + sx + 8
-        top = rect.top + sy - 2
+        left = rect.right + 8
+        top = rect.top - 2
       } else {
-        top = rect.bottom + sy + 6
+        top = rect.bottom + 6
       }
     }
     readout.style.left = left + 'px'
@@ -395,8 +398,6 @@
   function anchorCard() {
     if (!card || !state.anchor || !state.anchor.isConnected) return
     var rect = state.anchor.getBoundingClientRect()
-    var sx = window.scrollX
-    var sy = window.scrollY
     var width = card.offsetWidth || 304
     var height = card.offsetHeight || 168
     var gap = 12
@@ -408,17 +409,33 @@
     else left = Math.min(rect.left, window.innerWidth - width - 8)
     var top = rect.top
     if (top + height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - height - 8)
-    card.style.left = Math.max(8, left) + sx + 'px'
-    card.style.top = Math.max(8, top) + sy + 'px'
+    card.style.left = Math.max(8, left) + 'px'
+    card.style.top = Math.max(8, top) + 'px'
   }
 
-  /** Where a pin belongs, in document coordinates. Annotations captured before
-   *  `doc` existed fall back to their (stale) viewport rect plus the scroll
-   *  offset that was in effect — best effort, and it self-heals on the next
-   *  click, which rewrites the record. */
+  /** Where a pin belongs right now, in viewport coordinates: the element's live
+   *  position, so it travels with the page whether the window or an inner
+   *  container scrolls. Falls back to the recorded document position. */
   function pinAnchor(ann) {
-    if (ann.doc) return { x: ann.doc.x + ann.doc.w / 2, y: ann.doc.y }
-    return { x: ann.rect.x + window.scrollX + ann.rect.w / 2, y: ann.rect.y + window.scrollY }
+    var el = query(ann.selector)
+    if (el && el.isConnected) {
+      var rect = el.getBoundingClientRect()
+      return { x: rect.left + rect.width / 2, y: rect.top }
+    }
+    if (ann.doc) return { x: ann.doc.x + ann.doc.w / 2 - window.scrollX, y: ann.doc.y - window.scrollY }
+    return { x: ann.rect.x + ann.rect.w / 2, y: ann.rect.y }
+  }
+
+  /** Scroll/resize path: move the existing pins, don't rebuild them. */
+  function positionPins() {
+    state.annotations.forEach(function (ann, index) {
+      var pin = pinLayer.children[index]
+      if (!pin) return
+      var anchor = pinAnchor(ann)
+      pin.style.left = anchor.x + 'px'
+      pin.style.top = anchor.y + 'px'
+    })
+    anchorCard()
   }
 
   function renderPins() {
@@ -672,13 +689,23 @@
     if (changed) save()
   }
 
-  window.addEventListener('scroll', function () {
-    renderFrame()
-    renderPins()
-  }, true)
+  // Capture phase: scroll events from inner containers do not bubble, but they
+  // are delivered to window listeners registered for capture.
+  var frameQueued = false
+  function onViewportChange() {
+    if (frameQueued) return
+    frameQueued = true
+    requestAnimationFrame(function () {
+      frameQueued = false
+      renderFrame()
+      positionPins()
+    })
+  }
+  window.addEventListener('scroll', onViewportChange, true)
+  document.addEventListener('scroll', onViewportChange, true)
   window.addEventListener('resize', function () {
-    renderFrame()
     resyncAnchors()
+    renderFrame()
     renderPins()
   })
 
