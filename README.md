@@ -32,6 +32,11 @@ Captured from the test fixture; regenerate with `npm test`.*
 > so install from a checkout (§[Install](#install)). The `v0.1.0` release
 > workflow is already in place.
 
+<!-- When 0.1.0 is published, three small edits make this README current again:
+     delete the status note above, restore the npm badge near the top, and drop
+     the "(once 0.1.0 is published)" qualifier from the Install heading.
+     Mirror all three in README.zh-CN.md. -->
+
 ## What it does
 
 - **Finds your dev server by itself.** Every loopback service that is actually
