@@ -20,8 +20,8 @@ npm run check   # builds lib/ and syntax-checks every source file
 npm test        # distribution + browser regression suite
 ```
 
-`npm run dev` starts the bundled fixture and a throwaway harness profile seeded
-from this checkout. It requires the `dsh` CLI on `PATH`.
+For a live harness instead of the fixture, see the
+[live harness loop](#live-harness-loop) below.
 
 ## The one rule that trips people up
 
@@ -33,6 +33,15 @@ those files directly, so an install needs no build step.
   `npm run build` and commit the regenerated files in the same commit.
 - CI fails if `lib/` differs from a fresh build of `src/`, including new
   untracked files.
+
+## Build and reload
+
+| You changed | Do this |
+| --- | --- |
+| `src/client.js` or `src/i18n.js` | `npm run build`, then refresh the harness page |
+| `src/overlay.js`, `src/shim.js` | `npm run build`, restart the harness (the host caches the injected sources), then reload the preview |
+| `src/host.js` | `npm run build`, restart the harness |
+| `packages/dsh-app-bridge/` | restart the harness (no build step) |
 
 ## Where things live
 
@@ -77,6 +86,39 @@ same catalog. Keep both translations in sync when you add a key.
 - The suite must own and close every listener and browser it opens.
 - `REVIEW_TEST_PORT` moves the fixture off its default port 5180 when that port
   is busy. Never kill unrelated dev servers to make tests pass.
+
+Two environment escapes exist for unusual setups: `REVIEW_NODE_MODULES` points
+at another install's `node_modules`, and `PLAYWRIGHT_MODULE` at Playwright
+itself. The suite never calls a real model: the React fixture simulates session
+acceptance and rejection, and native harness loading stays a manual step.
+
+### Documentation screenshots
+
+The same run produces the panel screenshots used by the docs. When the panel's
+chrome changes, refresh the README image from a green run:
+
+```sh
+npm test
+cp tests/shots/review-en.png docs/panel-overview.png
+```
+
+Check the PNG for anything from your own machine before committing it: the list
+shot in particular lists whatever local dev servers you happen to be running.
+
+## Live harness loop
+
+`npm run dev` seeds a dedicated `dsh-annotate-dev` profile — never your daily
+profile — starts the bundled fixture on 5180 and the harness on 3099, and prints
+the tokenised URL. It requires the `dsh` CLI and pnpm. Use `--port` /
+`--app-port` to avoid existing listeners, and `--open` to launch a browser. The
+script owns both processes and stops them on exit.
+
+Manual checks worth running after a change to the preview path:
+
+1. Open a conversation, press `⌘/Ctrl⇧B`, and open the fixture from the list.
+2. Save an annotation, scroll both the window and the nested container inside
+   the fixture, and confirm the marker stays attached.
+3. Switch language and confirm both the panel and the marker labels change.
 
 ## Commit and pull request conventions
 

@@ -66,7 +66,7 @@ try {
   await page.goto(origin)
   mkdirSync(resolve(repo,'tests/shots'),{recursive:true})
   // Documentation shot: the discovery list, before anything is opened. The
-  // suite doubles as the screenshot generator; see DEVELOPING.md.
+  // suite doubles as the screenshot generator; see CONTRIBUTING.md.
   await page.locator('.dsa-svc').first().waitFor({timeout:15000}).catch(()=>{})
   await page.screenshot({path:resolve(repo,'tests/shots/review-list.png')})
   const open = async()=>{
