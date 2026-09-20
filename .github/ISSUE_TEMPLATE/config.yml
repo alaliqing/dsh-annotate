@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/alaliqing/dsh-annotate/security/advisories/new
+    about: Report security problems privately, not as a public issue.
+  - name: How the preview architecture works
+    url: https://github.com/alaliqing/dsh-annotate/blob/main/README.md#preview-architecture-and-limits
+    about: Read the documented boundaries before filing a preview bug.

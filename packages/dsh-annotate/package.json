@@ -1,8 +1,7 @@
 {
   "name": "dsh-annotate",
   "version": "0.1.0",
-  "private": true,
-  "description": "Element annotation review panel for DeepSeek Harness: pick UI elements in a Same-Origin preview, write notes, send them to the composer as one structured block",
+  "description": "Element annotation and review panel for the DeepSeek Harness web client: pick UI elements in a live app preview, write notes, and send them to the conversation as one structured block",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
@@ -17,8 +16,33 @@
     },
     "./package.json": "./package.json"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alaliqing/dsh-annotate.git",
+    "directory": "packages/dsh-annotate"
+  },
+  "homepage": "https://github.com/alaliqing/dsh-annotate#readme",
+  "bugs": {
+    "url": "https://github.com/alaliqing/dsh-annotate/issues"
+  },
+  "author": "qinjing <alaliqing@gmail.com>",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "annotation",
+    "review",
+    "devtools"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "prepack": "node build.mjs"
   },
   "dsh": {
     "client": {
@@ -26,7 +50,8 @@
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-ui-sidebar-right"
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-api-session-controller"
       ],
       "platform": "web"
     }
@@ -34,6 +59,8 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
+    "lib/shim.js",
+    "lib/overlay.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml",
     "README.md"

@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+# Generated: do not fold these into diffs or count them as source.
+packages/dsh-annotate/lib/client.js linguist-generated=true
+packages/dsh-annotate/lib/index.js linguist-generated=true
+packages/dsh-annotate/lib/shim.js linguist-generated=true
+packages/dsh-annotate/lib/overlay.js linguist-generated=true
+packages/dsh-annotate/lib/types/** linguist-generated=true
+
+# Keep binary artifacts binary.
+*.png binary

@@ -1,250 +1,253 @@
 # dsh-annotate
 
-Point at a rendered element in your running app, write the note, and hand it to
-**DeepSeek Harness** — inside the harness, from a native right-sidebar tab.
+[![CI](https://github.com/alaliqing/dsh-annotate/actions/workflows/ci.yml/badge.svg)](https://github.com/alaliqing/dsh-annotate/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/dsh-annotate.svg)](https://www.npmjs.com/package/dsh-annotate)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![node](https://img.shields.io/node/v/dsh-annotate.svg)](package.json)
 
-Two Cordis plugins:
+**Point at the UI, not at the code.** A review panel for the
+[DeepSeek Harness](https://www.npmjs.com/search?q=%40deepseek-ai%2Fdsh) web
+client: open a local app you are already running, click the elements you want
+changed, write a note on each, and send the whole review to the conversation as
+one structured block.
 
-| Package | What it does |
-| --- | --- |
-| [`dsh-annotate`](packages/dsh-annotate) | Right-sidebar review tab: same-origin preview, element picking, comments, live style tweaks, one structured block into the composer. Starts and stops the dev server itself. |
-| [`dsh-app-bridge`](packages/dsh-app-bridge) | Same-origin bridge: reverse-proxies a local dev server (all methods + WebSocket) onto the harness origin under `/app/`. |
+The panel lives in a normal sidebar tab, so it behaves like part of the harness
+rather than a bolted-on tool.
 
-## Quickstart
-
-### A. Just try it (nothing of yours involved)
-
-```bash
-cd ~/codeData/private_program/dsh-annotate     # this checkout
-node scripts/dev.mjs
+```
+  ⌘⇧B  →  pick a running local service  →  click an element  →  write a note
+        →  Send annotations (or Add to composer)  →  the agent gets selectors,
+           component names, geometry and computed styles with your comment
 ```
 
-Starts the bundled fixture plus a dedicated DSH profile with **no
-configuration**, and prints a URL like `http://127.0.0.1:3099/?token=…`. Open it
-→ open a conversation → <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd> → the fixture is
-listed → click it → annotate.
+## Requirements
 
-### B. Use it on your own project
+- Node.js 20 or newer.
+- A DeepSeek Harness instance whose web client you can restart. The harness
+  packages (`@deepseek-ai/dsh-*`) are public on npm.
+- Chromium is the validated browser. See [limits](#preview-architecture-and-limits).
 
-1. **Install one package** into your profile.
+Nothing else: `dsh-annotate` ships no runtime dependencies, and the built files
+are committed, so an install needs no build step.
 
-   `dsh plugin` shells out to `pnpm`, so if `pnpm` is not on your PATH either
-   install it once (`npm i -g pnpm`) or skip it and run pnpm inside the profile:
+## Install
 
-   ```bash
-   REPO=~/codeData/private_program/dsh-annotate     # this checkout
-   cd ~/.dsh/profiles/web
-   npx --yes pnpm@10 add link:$REPO/packages/dsh-annotate
-   ```
+Into a harness profile, with pnpm (what `dsh plugin` forwards to):
 
-   Then append this to `~/.dsh/profiles/web/cordis.patch.yml`:
+```sh
+dsh plugin --profile web add dsh-annotate
+```
 
-   ```yaml
-   - insert:
-       - name: dsh-annotate
-   ```
+Then add the plugin to that profile's `cordis.patch.yml`:
 
-   and restart the harness (`dsh web`). The mount is read at boot, so an
-   already-running harness keeps the old state until it restarts.
+```yaml
+- insert:
+    - name: dsh-annotate
+```
 
-2. **Start your dev server the way you always do** (`npm run dev`, `pnpm dev`,
-   whatever it is). You do **not** tell the plugin about it, and it does **not**
-   need a base prefix or a special script.
+Restart `dsh web`. Without pnpm on `PATH`, install it manually:
 
-3. **Open the tab** (`⌘⇧B`, or the conversation header's **标注** button, or the
-   right sidebar's `+` → guide entry). It lists the local web servers that are
-   actually running, with their page titles. Click one → the page loads → pick
-   elements, write notes (optionally tweak styles live) → **发给 AI**, or
-   <kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click an element to write and send in one step.
+```sh
+cd ~/.dsh/profiles/web
+npx --yes pnpm@10 add dsh-annotate
+```
 
-4. Nothing running? The tab says so and shows the command to run (read from the
-   session workspace's `package.json`), with a copy button. Refresh and it
-   appears.
+To run a checkout instead of the published package:
 
-An address bar is always there if you would rather type one: `5173`,
-`localhost:3000/x` and full URLs all work.
+```sh
+cd ~/.dsh/profiles/web
+npx --yes pnpm@10 add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
+```
 
-### Optional overrides
+Host-side changes need a harness restart; client-only changes need a page
+refresh.
 
-Everything below is unnecessary for the normal path:
+## Review a local app
+
+1. Start the project's own development server, the way you normally would.
+2. Open a conversation and press `⌘/Ctrl⇧B`, or use the **Annotate** header
+   button, or the sidebar `+` guide. The harness needs a materialized
+   conversation/sidebar surface; an empty welcome screen may not have one.
+3. Pick a detected service, or type `5173`, `localhost:3000/path`, or a local
+   URL. The list refreshes every five seconds while it is visible, and both IPv4
+   and IPv6 are probed.
+4. Press **Mark**, click an element, and write your note.
+
+   | Key | Effect |
+   | --- | --- |
+   | `Enter` | Save and keep marking |
+   | `Shift+Enter` | Newline |
+   | `Esc` | Cancel the editor and leave marking mode |
+   | `⌘/Ctrl`+click | Save this note and send the batch immediately |
+
+   Confirming a Chinese IME candidate is not treated as a save.
+5. Choose **Add to composer** to merge the review into your draft, or **Send
+   annotations** to send the review alone.
+
+Sending goes through the addressed harness session and waits for acceptance. A
+rejected send keeps the annotations; unrelated composer text and attachments are
+never touched. If the agent is busy, the review queues.
+
+Markers track their live element through window and nested scrolling, resizing
+and layout shifts. A marker whose element is clipped or gone is hidden rather
+than left at stale coordinates. Click a marker to edit its note, or open the
+**annotations** button in the toolbar for an in-flow list that can locate and
+delete comments without covering the preview. Deletion can be undone.
+
+## Language
+
+The panel ships in English and Chinese. It starts from your browser language and
+the toolbar button (`中` / `EN`) switches it; the choice is remembered per
+browser and is pushed into the previewed page, so the overlay's own labels follow.
+
+Strings live in [`src/i18n.js`](packages/dsh-annotate/src/i18n.js), and
+`npm run check` fails if the two languages drift apart.
+
+## Preview architecture and limits
+
+The hard part is that a page served from `http://127.0.0.1:5173` is a different
+origin from the harness, and a cross-origin iframe's DOM cannot be read — so no
+overlay can annotate it. The plugin solves that with **one loopback preview
+origin per session and app**:
+
+- A dedicated ephemeral HTTP server on `localhost` or `127.0.0.1`, deliberately
+  the *opposite* hostname from the harness, so the two never share an origin.
+- The browser sees the app's original paths: `/settings` stays `/settings`.
+  Root-absolute scripts, styles, SPA routes and WebSocket upgrades therefore work
+  with no proxy path prefix and no `<base>`.
+- The host injects a small shim (absolute fetch/XHR/EventSource/WebSocket URLs,
+  SPA navigation reports) plus the overlay, into every HTML document.
+- The overlay and the panel talk over `postMessage`, checked on both sides by
+  source **and** origin. The panel never reaches into the preview's DOM.
+- Proxy targets are restricted to `localhost`, `127.0.0.1` and `[::1]`. External
+  hosts, credentials in the URL, and the harness itself are rejected, for both
+  HTTP and WebSocket upgrades.
+- Host API writes are rejected unless they come from the harness's own origin.
+- App cookies are namespaced and sent as `SameSite=None; Secure; Partitioned`;
+  non-prefixed cookies are stripped in both directions. Chromium is the validated
+  engine for partitioned cookies.
+- Preview servers and their sockets close when the plugin is disposed. At most 24
+  session/app previews are retained per boot.
+
+This is a local development preview, not a general-purpose browser:
+
+- Origin-sensitive apps may need app-specific setup or a normal browser: OAuth
+  redirects, origin allowlists, hard-coded origins, and service workers.
+- HTTPS upstreams use normal certificate validation. An untrusted certificate
+  fails visibly; validation is never silently disabled.
+- A CSP that forbids inline scripts can prevent injection. HTTP CSP headers are
+  removed on the preview, but in-document policies still apply.
+- Shadow DOM internals and cross-origin child frames are not selectable. Canvas
+  content is selectable as a canvas element, not as individual drawn objects.
+- Remote harness instances, HTTPS reverse-proxy deployments, and reaching a
+  host's loopback services from another computer are out of scope for a
+  local-only design.
+- The preview is trusted local code, not a security boundary between you and the
+  app you chose to preview.
+
+## What an annotation carries
+
+Each note is sent with the evidence an agent needs to find the element again:
+
+| Field | Content |
+| --- | --- |
+| Location | Original URL, page, viewport size, and the element's zone in the viewport |
+| Identity | Escaped CSS selector, how many elements it matches, tag, first class |
+| Semantic anchors | `role`, `aria-label`, `alt`, `name`, `data-testid` when present |
+| Component | Nearest component name and the component chain (needs a development build) |
+| Geometry | Width × height and position |
+| Styles | A small set of computed values, as evidence — not an editing tool |
+| Text | The element's visible text, when short enough to be useful |
+| Note | Your comment |
+
+No screenshots are taken and no style is changed by the payload.
+
+Annotations and in-progress drafts are scoped to the harness session plus the
+full app URL (query and hash included), so SPA routes restore independently.
+They are mirrored in the preview origin's storage and on the harness side, so a
+reload does not lose the review. Old `v1` records are left untouched rather than
+guessed into an unrelated session.
+
+## Configuration
+
+Everything is optional; the panel uses discovery and needs no configuration.
 
 ```yaml
 - insert:
     - name: dsh-annotate
       config:
-        command: "npm run dev:panel"   # let the plugin start it for you
-        port: 5180
-        base: "/app"
-        proxyPrefix: "/__dsh_anno"     # where proxied pages are mounted
-        detect: { extraPorts: [4321], probeTimeoutMs: 900 }
+        detect:
+          extraPorts: [4321]     # always probe these, beyond the common list
+          probeTimeoutMs: 900    # per-port HTTP probe budget
+          cacheMs: 2000          # how long a scan result is reused
+          staticPorts: false     # true (default) also probes the common list
 ```
 
-`command` turns on the toolbar's start/stop controls; without it the plugin
-never touches your processes. `packages/dsh-app-bridge` remains for people who
-prefer a fixed mount of a base-prefixed dev server (higher fidelity, more
-setup).
+Process control is off unless you configure it. The host API accepts `command`
+(space-separated) or `argv` (preferred when paths contain spaces), plus `port`,
+`base` and `readyTimeoutMs`. The panel does not expose start/stop buttons: by
+default the plugin never starts or stops your development server, and only ever
+opens one you started.
 
-### When something is off
+## `dsh-app-bridge`
 
-| Symptom | Cause / fix |
-| --- | --- |
-| `⌘⇧B` does nothing | The conversation has no content yet, so no header/sidebar surface exists — use a conversation that already has messages. |
-| The list is empty but a server is running | It may not answer `GET /` with HTML, or it is on an unusual port: add `detect.extraPorts`, or type the address by hand. |
-| Preview is blank, assets 404 | The app builds absolute URLs the shim cannot see (rare) — set `proxyPrefix` aside and try `dsh-app-bridge` with a base-prefixed dev server instead. |
-| No component chain in an annotation | Component names come from a React dev build's fiber; non-React pages omit that line. |
-
-## Why a proxy is involved (you never see it)
-
-Annotating elements inside an `<iframe>` means reading that document's DOM, and
-the browser only allows it Same-Origin. A dev server on `localhost:5173` is a
-*different* origin from the harness on `127.0.0.1:3080`, so no overlay — however
-clever — can reach into it. Existing DSH preview plugins agree: they proxy
-*external* sites and deliberately skip loopback, which is exactly the case that
-matters when you are building the app yourself.
-
-So the plugin serves the picked page **on the harness origin**, automatically:
-
-```
-detected            http://127.0.0.1:5173/settings
-loaded as           <harness>/__dsh_anno/<encoded target>/settings
-mapped back to      http://127.0.0.1:5173/settings
-```
-
-Root-absolute URLs (`/src/main.tsx`, `/@vite/client`) are the hard part: a
-`<base>` cannot help, because parsing `/x` replaces the whole path. So the proxy
-rewrites them in HTML, injects an import map for the module graph, and a small
-shim prefixes what only appears at runtime (`fetch`, `XHR`, `EventSource`,
-`WebSocket`, `pushState`). Upgrades go through one relay path, and the app's
-cookies are scoped per target so nothing leaks into the harness. Only loopback
-targets are ever probed or opened.
-
-## Install (private, from disk)
-
-The short version is in [Quickstart](#b-use-it-on-your-own-project); this is the
-same thing spelled out, for a profile that has never had the plugin:
-
-```bash
-REPO=~/codeData/private_program/dsh-annotate       # this checkout
-
-# 1. the package (pnpm is what `dsh plugin` shells out to; this form needs none)
-cd ~/.dsh/profiles/web
-npx --yes pnpm@10 add link:$REPO/packages/dsh-annotate
-
-# 2. the mount — append to ~/.dsh/profiles/web/cordis.patch.yml
-#    - insert:
-#        - name: dsh-annotate
-
-# 3. restart the harness (mounts and host halves are read at boot)
-dsh web
-```
-
-Then, with any local dev server running: <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd> →
-pick it from the list → annotate → **发给 AI** (or <kbd>⌘</kbd>-click to send at
-once). Nothing about the project has to be configured, and nothing in the project
-has to change.
-
-Optional, for projects whose URLs defeat the shim (rare): `dsh-app-bridge` can
-mount a base-prefixed dev server at a fixed path instead —
+A second, small package in this repository, for the case where an app must be
+mounted at a **fixed path on the harness origin** (for example a base-prefixed
+dev server that cannot be served any other way):
 
 ```yaml
 - insert:
     - name: dsh-app-bridge
-      config: { target: "http://127.0.0.1:5173", prefix: "/app" }
+      config:
+        target: http://127.0.0.1:5180   # must be a loopback http(s) URL
+        prefix: /app                    # where it appears on the harness origin
+        # wsPaths: ['/app/', '/app']    # optional; defaults to both spellings
+        # forwardCredentials: false     # default; see below
 ```
 
-## Using the panel
+It registers one prefix route (streamed both ways, so SSE works) and HTTP upgrade
+routes for the dev server's WebSocket. Because the bridged app shares the harness
+origin, the harness's cookies and `Authorization` header would be visible to it
+and its `Set-Cookie` would land on the harness origin; credentials are stripped in
+both directions unless you opt in with `forwardCredentials: true`.
 
-```
-←  →  ⟳   [ address ]                      ☰   ?      ← navigation, list, help
-┌───────────────────────────────────────────────────┐
-│                                   ① 2 条批注 ▾     │  collapsible corner card
-│                  the page you picked               │
-├───────────────────────────────────────────────────┤
-│  ✎ 标记    ↗ 打开                    2 条    [发送] │  actions at the bottom
-└───────────────────────────────────────────────────┘
-```
-
-- **标记** turns element picking on; click an element in the page, write the note,
-  <kbd>Enter</kbd> saves it **and stays in marking mode**, so the next element is
-  one click away. **<kbd>Esc</kbd> leaves picking** — browse, scroll or follow a
-  link, then press 标记 again to keep annotating.
-- <kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click an element to write and send in one step.
-- Pins (`1`, `2`, …) are anchored to their element's document position, so they
-  travel with the page when it scrolls and re-anchor on resize.
-- The **corner card** (top right) holds the list: collapsed to a count, it opens
-  for per-annotation locate/delete — it never takes a row away from the page.
-- **发送** delivers the collected annotations straight to the conversation.
-  <kbd>⌥</kbd>/<kbd>Alt</kbd>+click keeps them in the composer instead, if you want
-  to add your own words first. If the harness refuses the automatic send (for
-  example a session owned by another instance), the block stays in the composer
-  with a chip and the panel says so.
-- **?** (top right) opens the short version of all of this.
-
-## What an annotation carries
-
-Enough to find the element without a screenshot: selector path **and how many
-elements it matches**, `role` / `aria-label` / `alt` / `name` / `data-testid`,
-the **component chain**, size, position and viewport placement, computed styles,
-and the visible text. There is no style editing: the note is the deliverable, and
-the computed styles are read-only evidence for whoever fixes it.
-
-```
-#1 button.idd-visual-select-trigger  组件:VisualSelect
-   语义: aria-label="Content typeface"
-   组件链: VisualSelect > TypefacePicker > ThemeRecipeSettings
-   选择器: div#idd-settings-panel-appearance > section... > button.idd-visual-select-trigger（命中 1 个元素）
-   位置/尺寸: 211×45 @ (1346, 348) · 视口 中右（91%W × 52%H）
-   当前样式: display:grid; padding:5px 12px 5px 6px; border-radius:9px; ...
-   批注: 这个和左侧的这个框不是一样高，看起来有点奇怪
-```
-
-Screenshots were tried and dropped: they are a second render (scroll position,
-transient state and data may differ from what the reader saw), they carry no DOM
-truth, and the structured fields above already identify the element. For visual
-defects the note describes the symptom, and the fix is verified by re-rendering.
-
-## Requirements
-
-- DeepSeek Harness with a web profile (`dsh web`)
-- `pnpm` on PATH for `dsh plugin` commands, or `npx --yes pnpm@10` (needed once,
-  to install)
-- A local dev server to look at — anything that answers `GET /` with HTML on a
-  loopback port. No configuration, no base prefix, no special script
-- Playwright only to run this repo's tests
+It is a proxy and nothing more — it injects no script. Prefer the ordinary
+`dsh-annotate` preview, which does not share an origin with the harness at all.
 
 ## Development
 
-```bash
-node packages/dsh-annotate/build.mjs     # src/ -> lib/ (lib is committed so
-                                          # `link:` installs work unbuilt)
-node --check packages/dsh-annotate/lib/client.js
+```sh
+npm ci
+npx playwright install chromium
+npm run check   # build lib/, syntax-check every file, validate the i18n catalog
+npm test        # distributions guard + assertion-based Chromium suite
 ```
 
-One command brings up the whole loop against the bundled fixture, on its own
-profile and port, without touching your daily harness:
+`npm test` starts disposable loopback services and drives the real built client,
+shim and overlay through a React fixture. It covers discovery, preview isolation,
+path preservation, cookie/fetch/WebSocket round-trips, Chinese IME, nested wheel
+scrolling, clipping, layout shifts, route and session separation, rejected and
+accepted sends, attaching, the language switch, and narrow layouts. No model is
+called. Screenshots are written to the ignored `tests/shots/`.
 
-```bash
-node scripts/dev.mjs                      # or --base /demo/ --app-port 5199 --port 3099
-```
+For a live harness, `node scripts/dev.mjs` seeds a throwaway profile and runs the
+bundled fixture against it. See [DEVELOPING.md](DEVELOPING.md) and
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-`tests/` holds two Playwright checks against a running harness: `overlay.mjs`
-drives the injected overlay on a bare page, `gui-smoke.mjs` walks the whole
-sidebar-tab flow (auto-start → preview → annotate → send). See
-[DEVELOPING.md](DEVELOPING.md) for the restart matrix, the config reference and
-the fixture's ground rules.
+| Path | What it is |
+| --- | --- |
+| `packages/dsh-annotate/` | The plugin: host half, client half, injected shim and overlay |
+| `packages/dsh-app-bridge/` | The fixed-mount reverse proxy |
+| `examples/demo-app/` | Dependency-free fixture app used by the dev loop and tests |
+| `docs/` | Design notes, including the [reliability plan](docs/PLAN-reliability-and-ux.md) |
 
-## Direction
+## Contributing
 
-The target shape is Codex's in-app browser, scoped to **local** web: open the
-sidebar tab, it lists the local dev servers that are actually running, one click
-opens one — and annotation works on it immediately, with no per-project
-configuration. Install once, restart once.
-[docs/PLAN-sidebar-browser.md](docs/PLAN-sidebar-browser.md) has the plan,
-including the one non-obvious requirement (a page on `:5173` is cross-origin
-from the harness, so detection has to be paired with a loopback proxy on the
-harness origin to be annotatable at all).
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for
+the build rule that trips people up (`lib/` is generated *and* committed) and the
+test expectations. For a security problem, follow [SECURITY.md](SECURITY.md)
+instead of opening a public issue.
 
-## Status
+## License
 
-Private tooling, not published. MIT licensed, see [LICENSE](LICENSE) and
-[NOTICE](NOTICE).
+[MIT](LICENSE), with third-party attribution in [NOTICE](NOTICE).
