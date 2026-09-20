@@ -103,6 +103,15 @@ const PANEL_CSS = `
   color:var(--dsw-alias-label-secondary,#9aa0a6); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .dsa-svc .go { flex:none; font-size:11px; color:${MARKER}; opacity:0 }
 .dsa-svc:hover .go { opacity:1 }
+/* A tag names what the row is: the workspace's own service, or a declared port. */
+.dsa-tag { display:inline-block; margin-left:6px; padding:1px 5px; border-radius:6px; vertical-align:1px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--dsw-alias-label-secondary,#9aa0a6); background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 8%,transparent) }
+.dsa-tag.is-project { color:${MARKER}; background:color-mix(in srgb,${MARKER} 16%,transparent) }
+.dsa-svc.is-project .dot { background:${MARKER}; box-shadow:0 0 0 3px color-mix(in srgb,${MARKER} 20%,transparent) }
+/* A static page is not a running service, so its dot reads as a file. */
+.dsa-file .dot { background:#8a93a5; box-shadow:0 0 0 3px color-mix(in srgb,#8a93a5 20%,transparent) }
+.dsa-sechead.is-sub { padding-top:14px }
 
 .dsa-openrow { display:flex; gap:6px; align-items:center; padding:10px 11px;
   border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent) }
@@ -290,7 +299,9 @@ function payloadBlock(annotations, page, viewport) {
 }
 
 
-/** Accept what people actually type: `5173`, `:5173`, `localhost:3000/x`, a URL. */
+/** Accept what people actually type: `5173`, `:5173`, `localhost:3000/x`, a URL.
+ *  A `file://` address passes through for a static page in the workspace; the
+ *  host half decides whether that file may be read. */
 function normalizeAddress(text) {
   const raw = String(text || '').trim()
   if (!raw) return null
@@ -300,11 +311,18 @@ function normalizeAddress(text) {
   else if (!/^[a-z]+:\/\//i.test(candidate)) candidate = `http://${candidate}`
   try {
     const url = new URL(candidate)
+    if (url.protocol === 'file:') return url.host ? null : url.href
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
     return url.href
   } catch (error) {
     return null
   }
+}
+
+/** The browser has no path-to-URL helper: encode per segment, so a `#` or `?`
+ *  in a file name cannot turn into a fragment or query. */
+function fileAddressOf(path) {
+  return 'file://' + String(path).split('/').map((part, index) => (index === 0 ? '' : encodeURIComponent(part))).join('/')
 }
 
 const isLoopback = (hostname) => /^(127\.0\.0\.1|localhost|\[::1\]|::1)$/.test(hostname)
@@ -347,6 +365,7 @@ function apply(ctx) {
         model: makeModel({
           view: 'list',
           services: [],
+          files: [],
           detect: 'idle',
           scanned: 0,
           hint: null,
@@ -455,14 +474,16 @@ function apply(ctx) {
       return false
     }
     const parsed = new URL(url)
-    if (!isLoopback(parsed.hostname) || parsed.origin === location.origin) {
+    const isFile = parsed.protocol === 'file:'
+    // A file target is checked by the host against the session workspace.
+    if (!isFile && (!isLoopback(parsed.hostname) || parsed.origin === location.origin)) {
       flash(panel, t('notice.notLocal'))
       return false
     }
     const request = (panel.openRequest || 0) + 1
     panel.openRequest = request
     panel.model.set({ loading: true, error: null, view: 'page', input: url })
-    const preview = await api('preview', { sid: panel.sid, url })
+    const preview = await api('preview', { sid: panel.sid, url, root: panel.model.get().root })
     if (panel.openRequest !== request) return false
     if (!preview.ok) {
       panel.model.set({ loading: false, error: hostMessage(preview, 'notice.previewFailed') })
@@ -480,7 +501,7 @@ function apply(ctx) {
       index: Math.min(history.length - 1, 39),
       mode: 'idle',
       annotations: readAnnotations(panel, url),
-      page: parsed.pathname,
+      page: isFile ? '/' + decodeURIComponent(parsed.pathname.split('/').pop() || '') : parsed.pathname,
       notice: null,
     })
     if (state.src === preview.url) notify('ping')
@@ -502,14 +523,19 @@ function apply(ctx) {
     }
     panel.model.set({
       services: res.services || [],
+      files: res.files || [],
       hint: res.hint || null,
       scanned: res.scanned || 0,
       detect: 'idle',
     })
     const current = panel.model.get()
-    if (auto && current.view === 'list' && !current.url && (res.services || []).length === 1) {
-      openUpstream(panel, res.services[0].url, { push: true })
-      flash(panel, t('notice.autoOpened'))
+    const services = res.services || []
+    const files = res.files || []
+    // One candidate and nothing open: the zero-configuration promise. A static
+    // page only wins when no service is running at all.
+    if (auto && current.view === 'list' && !current.url && (services.length === 1 || (!services.length && files.length === 1))) {
+      openUpstream(panel, services.length ? services[0].url : fileAddressOf(files[0].path), { push: true })
+      flash(panel, t(services.length ? 'notice.autoOpened' : 'notice.autoOpenedFile'))
     }
   }
 
@@ -737,10 +763,12 @@ function apply(ctx) {
 
     if (state.view === 'list') {
       const services = state.services
+      const files = state.files
       const commands =
         state.hint && state.hint.commands && state.hint.commands.length
           ? state.hint.commands
           : [{ script: 'dev', command: 'npm run dev' }]
+      const tag = (key, extra) => React.createElement('span', { className: 'dsa-tag' + (extra ? ' ' + extra : '') }, t(key))
       return React.createElement(
         'div',
         { className: 'dsa-col' },
@@ -765,18 +793,40 @@ function apply(ctx) {
           services.map((service) =>
             React.createElement(
               'button',
-              { className: 'dsa-svc', type: 'button', key: service.port, onClick: () => openUpstream(panel, service.url) },
+              { className: 'dsa-svc' + (service.project ? ' is-project' : ''), type: 'button', key: service.port, onClick: () => openUpstream(panel, service.url) },
               React.createElement('span', { className: 'dot' }),
               React.createElement(
                 'span',
                 { className: 'copy' },
-                React.createElement('b', null, service.title || service.url),
+                React.createElement(
+                  'b',
+                  null,
+                  service.title || service.url,
+                  service.project ? tag('list.project', 'is-project') : service.declared ? tag('list.declared') : null
+                ),
                 React.createElement('span', null, service.url)
               ),
               React.createElement('span', { className: 'go' }, t('list.open'))
             )
           ),
-          !services.length && state.detect !== 'busy'
+          files.length
+            ? React.createElement('div', { className: 'dsa-sechead is-sub' }, t('list.filesHeader', { count: files.length }))
+            : null,
+          files.map((file) =>
+            React.createElement(
+              'button',
+              { className: 'dsa-svc dsa-file', type: 'button', key: file.path, onClick: () => openUpstream(panel, fileAddressOf(file.path)) },
+              React.createElement('span', { className: 'dot' }),
+              React.createElement(
+                'span',
+                { className: 'copy' },
+                React.createElement('b', null, file.rel),
+                React.createElement('span', null, file.path)
+              ),
+              React.createElement('span', { className: 'go' }, t('list.open'))
+            )
+          ),
+          !services.length && !files.length && state.detect !== 'busy'
             ? React.createElement(
                 'div',
                 { className: 'dsa-hintbox' },

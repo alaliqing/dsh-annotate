@@ -6,6 +6,24 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- **Workspace-first service discovery.** A listening service is now claimed by
+  the conversation's workspace when the owning process was started inside it
+  (`lsof` PID, then `/proc` or `lsof` for the working directory), shown as
+  **This project**, and ranked above everything else. Ports the workspace names
+  in `package.json` or a Vite config are marked **Configured port** and rank
+  next; the common-port preference follows.
+- **Static page previews.** `index.html` at the workspace root, or a page under
+  `dist/`, `build/`, `out/` or `public/`, is offered in the service list. The
+  plugin serves that directory itself on a loopback origin — read-only, `GET`/
+  `HEAD` only, inside the workspace, no dotfiles, 64 MiB per file, unknown
+  client-side routes falling back to `index.html` — and previews it through the
+  same proxy, so it is annotatable with no dev server running. The preview keeps
+  the file's own address (with any hash route) as the page identity.
+- **`detect.staticFiles`** to turn the static-page listing off, matching the
+  existing `detect.staticPorts`.
+
 ## [0.1.0]
 
 First public release. The plugin was developed as a private prototype before

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { createHash } from 'node:crypto'
-import { readFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { resolve, dirname } from 'node:path'
+import { tmpdir } from 'node:os'
+import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadPlaywright } from './playwright.mjs'
 import { apply } from '../packages/dsh-annotate/lib/index.js'
@@ -54,6 +55,33 @@ try {
   const origin = `http://127.0.0.1:${host.address().port}`, upstream = `http://127.0.0.1:${app.address().port}`
   const api = async(method,args={}) => fetch(origin+'/__dsh-annotate/api',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({method,args})}).then(r=>r.json())
   const detection = await api('detect'); assert(detection.services.some(s=>s.port===app.address().port)); pass('default 5180 service is discovered')
+  // A workspace of the test's own: a port named in its package.json, an
+  // index.html at its root, and a file that must not be previewable.
+  const workspace = mkdtempSync(join(tmpdir(),'anno-workspace-'))
+  writeFileSync(join(workspace,'index.html'),'<!doctype html><html><head><title>静态页面</title></head><body><h1 id="static-page">项目内的静态页面</h1><script src="./app.js"></script></body></html>')
+  writeFileSync(join(workspace,'app.js'),'window.__STATIC_FIXTURE__=true')
+  writeFileSync(join(workspace,'notes.txt'),'not a page\n')
+  writeFileSync(join(workspace,'package.json'),JSON.stringify({name:'anno-workspace',scripts:{dev:'vite --port '+app.address().port}}))
+  const scoped = await api('detect',{root:workspace,sid:'workspace',force:true})
+  const declared = scoped.services.find(s=>s.port===app.address().port)
+  assert(declared && declared.declared===true); assert(scoped.files.some(f=>f.rel==='index.html'))
+  assert.equal(scoped.files[0].rel,'index.html');pass('a workspace port is marked as configured and its static page is listed')
+  const other = await api('detect',{root:mkdtempSync(join(tmpdir(),'anno-other-')),sid:'other',force:true})
+  assert(other.services.every(s=>!s.project));pass('an unrelated workspace claims no service')
+  const staticUrl = 'file://' + join(workspace,'index.html')
+  const staticPreview = await api('preview',{url:staticUrl,root:workspace,sid:'workspace'})
+  assert.equal(staticPreview.ok,true)
+  const staticHtml = await (await fetch(staticPreview.url)).text()
+  assert(staticHtml.includes('项目内的静态页面') && staticHtml.includes('__DSH_ANNO__') && staticHtml.includes(JSON.stringify(staticUrl)))
+  pass('a workspace HTML file previews with the annotation overlay and its own address')
+  const staticAsset = await fetch(staticPreview.origin + '/app.js')
+  assert.equal(staticAsset.headers.get('content-type'),'text/javascript; charset=utf-8');pass('a static preview serves its relative assets')
+  assert.equal((await fetch(staticPreview.origin + '/%2e%2e%2f%2e%2e%2fetc%2fpasswd')).status,403)
+  assert.equal((await fetch(staticPreview.origin + '/.env')).status,403);pass('traversal and dotfiles are refused')
+  assert.equal((await api('preview',{url:'file://' + join(workspace,'notes.txt'),root:workspace,sid:'workspace'})).code,'notHtmlFile')
+  assert.equal((await api('preview',{url:'file:///etc/hosts',root:workspace,sid:'workspace'})).code,'notAllowedFile')
+  assert.equal((await api('preview',{url:staticUrl,sid:'workspace'})).code,'notAllowedFile')
+  assert.equal((await api('preview',{url:'file:///etc/hosts',root:'/tmp',sid:'workspace'})).code,'notAllowedFile');pass('only HTML inside the workspace can be previewed')
   assert.equal((await api('preview',{url:'http://example.com',sid:'x'})).ok,false)
   assert.equal((await fetch(origin+'/__dsh-annotate/api',{method:'POST',headers:{origin:'http://127.0.0.2:9999'},body:'{}'})).status,403); pass('external targets and cross-origin API writes rejected')
   const secure = await api('preview',{url:'https://127.0.0.1:' + app.address().port,sid:'tls-check'})
@@ -188,6 +216,22 @@ try {
   await page.locator('.dsa-lang').click()
   await page.waitForFunction(()=>document.querySelector('.dsa-bar button[title="后退"]'))
   assert.equal(await page.locator('button[title^="标记模式"]').count(),1);pass('language switch is reversible')
+  // The list now belongs to the workspace the panel was told about: its service
+  // carries the configured-port tag and its static page is offered directly.
+  await page.locator('button[title="回到本地服务列表"]').click()
+  await page.evaluate(dir=>window.reviewTest.setWorkspaces([{path:dir,sessionIds:['review-a']}]),workspace)
+  await page.waitForTimeout(50)
+  await page.locator('.dsa-ico[title="重新检测"]').click().catch(()=>{})
+  const fileRow = page.locator('.dsa-file').first()
+  await fileRow.waitFor({timeout:10000})
+  assert.equal(await page.locator('.dsa-svc',{hasText:upstream}).locator('.dsa-tag').textContent(),'配置端口')
+  pass('the workspace service is tagged and its static page is listed')
+  await fileRow.click()
+  await page.waitForFunction(()=>document.querySelector('iframe')&&!document.querySelector('.dsa-empty'),null,{timeout:10000})
+  const staticFrame = page.frames().find(f=>f.url().includes('/index.html'));assert(staticFrame)
+  assert.equal(await staticFrame.evaluate(()=>document.querySelector('#static-page').textContent),'项目内的静态页面')
+  assert.equal(await staticFrame.evaluate(()=>window.__STATIC_FIXTURE__),true)
+  assert((await page.locator('.dsa-url').inputValue()).startsWith('file://'));pass('a listed static page opens, keeps its file address and runs its relative script')
   await page.locator('.dsa-url').fill('http://127.0.0.1:1/');await page.locator('.dsa-url').press('Enter')
   await page.waitForFunction(()=>document.querySelector('.dsa-empty')?.textContent.includes('预览暂时不可用'))
   assert(await page.getByRole('button',{name:'重试',exact:true}).isVisible());pass('unavailable service shows error and retry')

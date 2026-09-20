@@ -104,11 +104,12 @@ chrome changes, refresh the README image from a green run:
 
 ```sh
 npm test
-cp tests/shots/review-en.png docs/panel-overview.png
+cwebp -q 90 tests/shots/review-en.png -o docs/panel-overview.webp
 ```
 
-Check the PNG for anything from your own machine before committing it: the list
-shot in particular lists whatever local dev servers you happen to be running.
+Both READMEs point at that file. Check it for anything from your own machine
+before committing it: the list shot in particular lists whatever local dev
+servers you happen to be running.
 
 ## Live harness loop
 

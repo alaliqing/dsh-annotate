@@ -73,6 +73,9 @@ function dsaI18n(preferred) {
       'list.none': 'No local services found',
       'list.redetect': 'Scan again',
       'list.open': 'Open →',
+      'list.project': 'This project',
+      'list.declared': 'Configured port',
+      'list.filesHeader': 'Static pages in this project ({count})',
       'list.emptyHint': 'No local web server is running ({count} ports scanned). Start one, then refresh:',
       'list.copy': 'Copy',
       'list.copied': 'Copied: {text}',
@@ -129,6 +132,7 @@ function dsaI18n(preferred) {
       'notice.detectFailed': 'Scan failed: {error}',
       'notice.unknownError': 'unknown error',
       'notice.autoOpened': 'One local service found, opened it automatically',
+      'notice.autoOpenedFile': 'One static page found, opened it automatically',
       'notice.storageUnavailable': 'Browser storage is unavailable. Add the annotations to the composer before closing.',
       'notice.finishEditing': 'Save or close the annotation you are editing first.',
       'notice.noComposer': 'Select a conversation with a composer first.',
@@ -143,6 +147,9 @@ function dsaI18n(preferred) {
       'notice.draftUnavailable': 'The draft cannot be persisted. Save the annotation first.',
       'notice.elementGone': 'The original element changed or disappeared. The annotation is kept — delete it and annotate again.',
       'host.notLocalTarget': 'Only local development services can be previewed; Harness itself cannot.',
+      'host.notAllowedFile': 'Only an HTML file inside this workspace can be previewed as a file.',
+      'host.notHtmlFile': 'Only .html and .htm files can be opened as a static page.',
+      'host.staticUnavailable': 'That file is no longer available in this workspace.',
       'host.tooManyPreviews': 'Too many previews are open. Restart the plugin to release the idle ones.',
       'host.noCommand': 'No start command is configured (this is an optional feature).',
       'host.noRoot': 'The workspace directory is unknown, so no dev server can be started.',
@@ -208,6 +215,9 @@ function dsaI18n(preferred) {
       'list.none': '没有检测到本地服务',
       'list.redetect': '重新检测',
       'list.open': '打开 →',
+      'list.project': '当前项目',
+      'list.declared': '配置端口',
+      'list.filesHeader': '本项目内的静态页面（{count}）',
       'list.emptyHint': '没有正在运行的本地 web（已扫 {count} 个端口）。先把它跑起来，再点刷新：',
       'list.copy': '复制',
       'list.copied': '已复制：{text}',
@@ -264,6 +274,7 @@ function dsaI18n(preferred) {
       'notice.detectFailed': '检测失败：{error}',
       'notice.unknownError': '未知错误',
       'notice.autoOpened': '检测到 1 个本地服务，已自动打开',
+      'notice.autoOpenedFile': '检测到 1 个静态页面，已自动打开',
       'notice.storageUnavailable': '浏览器存储不可用，请在关闭前加入输入框。',
       'notice.finishEditing': '请先保存或关闭正在编辑的批注。',
       'notice.noComposer': '请先选择一个有输入框的会话。',
@@ -278,6 +289,9 @@ function dsaI18n(preferred) {
       'notice.draftUnavailable': '草稿无法持久保存，请先保存批注。',
       'notice.elementGone': '原元素已变化或消失，批注仍保留，可删除后重新标注。',
       'host.notLocalTarget': '仅支持本地开发服务，不可预览 Harness 自身。',
+      'host.notAllowedFile': '只能预览当前工作区内、属于本项目的 HTML 文件。',
+      'host.notHtmlFile': '静态预览只支持 .html / .htm 文件。',
+      'host.staticUnavailable': '该文件在当前工作区中已不可用。',
       'host.tooManyPreviews': '预览数量已达上限，请重启插件释放闲置预览。',
       'host.noCommand': '未配置启动命令（可选功能）',
       'host.noRoot': '不知道工作区目录，无法启动 dev server',
@@ -462,6 +476,15 @@ const PANEL_CSS = `
   color:var(--dsw-alias-label-secondary,#9aa0a6); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .dsa-svc .go { flex:none; font-size:11px; color:${MARKER}; opacity:0 }
 .dsa-svc:hover .go { opacity:1 }
+/* A tag names what the row is: the workspace's own service, or a declared port. */
+.dsa-tag { display:inline-block; margin-left:6px; padding:1px 5px; border-radius:6px; vertical-align:1px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--dsw-alias-label-secondary,#9aa0a6); background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 8%,transparent) }
+.dsa-tag.is-project { color:${MARKER}; background:color-mix(in srgb,${MARKER} 16%,transparent) }
+.dsa-svc.is-project .dot { background:${MARKER}; box-shadow:0 0 0 3px color-mix(in srgb,${MARKER} 20%,transparent) }
+/* A static page is not a running service, so its dot reads as a file. */
+.dsa-file .dot { background:#8a93a5; box-shadow:0 0 0 3px color-mix(in srgb,#8a93a5 20%,transparent) }
+.dsa-sechead.is-sub { padding-top:14px }
 
 .dsa-openrow { display:flex; gap:6px; align-items:center; padding:10px 11px;
   border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent) }
@@ -649,7 +672,9 @@ function payloadBlock(annotations, page, viewport) {
 }
 
 
-/** Accept what people actually type: `5173`, `:5173`, `localhost:3000/x`, a URL. */
+/** Accept what people actually type: `5173`, `:5173`, `localhost:3000/x`, a URL.
+ *  A `file://` address passes through for a static page in the workspace; the
+ *  host half decides whether that file may be read. */
 function normalizeAddress(text) {
   const raw = String(text || '').trim()
   if (!raw) return null
@@ -659,11 +684,18 @@ function normalizeAddress(text) {
   else if (!/^[a-z]+:\/\//i.test(candidate)) candidate = `http://${candidate}`
   try {
     const url = new URL(candidate)
+    if (url.protocol === 'file:') return url.host ? null : url.href
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
     return url.href
   } catch (error) {
     return null
   }
+}
+
+/** The browser has no path-to-URL helper: encode per segment, so a `#` or `?`
+ *  in a file name cannot turn into a fragment or query. */
+function fileAddressOf(path) {
+  return 'file://' + String(path).split('/').map((part, index) => (index === 0 ? '' : encodeURIComponent(part))).join('/')
 }
 
 const isLoopback = (hostname) => /^(127\.0\.0\.1|localhost|\[::1\]|::1)$/.test(hostname)
@@ -706,6 +738,7 @@ function apply(ctx) {
         model: makeModel({
           view: 'list',
           services: [],
+          files: [],
           detect: 'idle',
           scanned: 0,
           hint: null,
@@ -814,14 +847,16 @@ function apply(ctx) {
       return false
     }
     const parsed = new URL(url)
-    if (!isLoopback(parsed.hostname) || parsed.origin === location.origin) {
+    const isFile = parsed.protocol === 'file:'
+    // A file target is checked by the host against the session workspace.
+    if (!isFile && (!isLoopback(parsed.hostname) || parsed.origin === location.origin)) {
       flash(panel, t('notice.notLocal'))
       return false
     }
     const request = (panel.openRequest || 0) + 1
     panel.openRequest = request
     panel.model.set({ loading: true, error: null, view: 'page', input: url })
-    const preview = await api('preview', { sid: panel.sid, url })
+    const preview = await api('preview', { sid: panel.sid, url, root: panel.model.get().root })
     if (panel.openRequest !== request) return false
     if (!preview.ok) {
       panel.model.set({ loading: false, error: hostMessage(preview, 'notice.previewFailed') })
@@ -839,7 +874,7 @@ function apply(ctx) {
       index: Math.min(history.length - 1, 39),
       mode: 'idle',
       annotations: readAnnotations(panel, url),
-      page: parsed.pathname,
+      page: isFile ? '/' + decodeURIComponent(parsed.pathname.split('/').pop() || '') : parsed.pathname,
       notice: null,
     })
     if (state.src === preview.url) notify('ping')
@@ -861,14 +896,19 @@ function apply(ctx) {
     }
     panel.model.set({
       services: res.services || [],
+      files: res.files || [],
       hint: res.hint || null,
       scanned: res.scanned || 0,
       detect: 'idle',
     })
     const current = panel.model.get()
-    if (auto && current.view === 'list' && !current.url && (res.services || []).length === 1) {
-      openUpstream(panel, res.services[0].url, { push: true })
-      flash(panel, t('notice.autoOpened'))
+    const services = res.services || []
+    const files = res.files || []
+    // One candidate and nothing open: the zero-configuration promise. A static
+    // page only wins when no service is running at all.
+    if (auto && current.view === 'list' && !current.url && (services.length === 1 || (!services.length && files.length === 1))) {
+      openUpstream(panel, services.length ? services[0].url : fileAddressOf(files[0].path), { push: true })
+      flash(panel, t(services.length ? 'notice.autoOpened' : 'notice.autoOpenedFile'))
     }
   }
 
@@ -1096,10 +1136,12 @@ function apply(ctx) {
 
     if (state.view === 'list') {
       const services = state.services
+      const files = state.files
       const commands =
         state.hint && state.hint.commands && state.hint.commands.length
           ? state.hint.commands
           : [{ script: 'dev', command: 'npm run dev' }]
+      const tag = (key, extra) => React.createElement('span', { className: 'dsa-tag' + (extra ? ' ' + extra : '') }, t(key))
       return React.createElement(
         'div',
         { className: 'dsa-col' },
@@ -1124,18 +1166,40 @@ function apply(ctx) {
           services.map((service) =>
             React.createElement(
               'button',
-              { className: 'dsa-svc', type: 'button', key: service.port, onClick: () => openUpstream(panel, service.url) },
+              { className: 'dsa-svc' + (service.project ? ' is-project' : ''), type: 'button', key: service.port, onClick: () => openUpstream(panel, service.url) },
               React.createElement('span', { className: 'dot' }),
               React.createElement(
                 'span',
                 { className: 'copy' },
-                React.createElement('b', null, service.title || service.url),
+                React.createElement(
+                  'b',
+                  null,
+                  service.title || service.url,
+                  service.project ? tag('list.project', 'is-project') : service.declared ? tag('list.declared') : null
+                ),
                 React.createElement('span', null, service.url)
               ),
               React.createElement('span', { className: 'go' }, t('list.open'))
             )
           ),
-          !services.length && state.detect !== 'busy'
+          files.length
+            ? React.createElement('div', { className: 'dsa-sechead is-sub' }, t('list.filesHeader', { count: files.length }))
+            : null,
+          files.map((file) =>
+            React.createElement(
+              'button',
+              { className: 'dsa-svc dsa-file', type: 'button', key: file.path, onClick: () => openUpstream(panel, fileAddressOf(file.path)) },
+              React.createElement('span', { className: 'dot' }),
+              React.createElement(
+                'span',
+                { className: 'copy' },
+                React.createElement('b', null, file.rel),
+                React.createElement('span', null, file.path)
+              ),
+              React.createElement('span', { className: 'go' }, t('list.open'))
+            )
+          ),
+          !services.length && !files.length && state.detect !== 'busy'
             ? React.createElement(
                 'div',
                 { className: 'dsa-hintbox' },

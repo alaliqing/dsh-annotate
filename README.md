@@ -12,7 +12,7 @@
 Open a local app, click the elements you want changed, leave notes, and send the
 whole review to your conversation as structured text.
 
-![dsh-annotate showing a local app, an annotation list, and a numbered marker](docs/panel-overview.png)
+![dsh-annotate showing a local app, an annotation list, and a numbered marker](docs/panel-overview.webp)
 
 ```text
 ⌘/Ctrl ⇧ B → choose a local app → Mark → click → comment → send
@@ -24,7 +24,10 @@ whole review to your conversation as structured text.
 ## What it gives you
 
 - **Zero-config discovery** of running loopback development servers, including
-  IPv4 and IPv6.
+  IPv4 and IPv6, with the services that belong to the current workspace first.
+- **Static pages need no server:** an `index.html` — or a built page under
+  `dist/`, `build/`, `out/` or `public/` — is offered straight from the
+  workspace and previewed from its own directory.
 - **Element-level context:** CSS selector and match count, semantic attributes,
   React component chain, geometry, computed styles, and visible text.
 - **Markers that stay attached** through window or nested scrolling, resizing,
@@ -66,7 +69,8 @@ dsh plugin --profile web add dsh-annotate
 
 1. Start your app's development server.
 2. Open a Harness conversation, then press `⌘/Ctrl⇧B` or click **Annotate**.
-3. Choose a detected service, or enter a port or loopback URL.
+3. Choose a detected service or one of the workspace's static pages, or enter a
+   port or loopback URL.
 4. Click **Mark**, select an element, and write a note.
 5. Choose **Add to composer** or **Send annotations**.
 
@@ -79,6 +83,13 @@ dsh plugin --profile web add dsh-annotate
 
 Annotations and drafts are stored by Harness conversation and full app URL, so
 routes restore independently and conversations never share notes.
+
+Rows are ordered by how likely they are to be yours: a service whose process was
+started inside the conversation's workspace is tagged **This project**, a port
+the workspace names in `package.json` or a Vite config is tagged **Configured
+port**, then the common-port order follows. Static pages are listed under their
+own heading, and when exactly one candidate exists it opens on its own — a
+static page only when no server is running at all.
 
 ## What gets sent
 
@@ -105,6 +116,9 @@ ephemeral loopback origin and injects a small shim and picking overlay.
 
 - Panel and overlay validate both message source and origin.
 - Targets are restricted to `localhost`, `127.0.0.1`, and `[::1]`.
+- A static page is served by the plugin itself, read-only, from its own
+  directory on a loopback origin: `GET`/`HEAD` only, nothing outside the
+  workspace, no dotfiles, and a 64 MiB ceiling per file.
 - App cookies are namespaced; unprefixed cookies are stripped both ways.
 - Preview servers and sockets close when the plugin is disposed.
 
@@ -125,7 +139,12 @@ Chromium.
           probeTimeoutMs: 900
           cacheMs: 2000
           staticPorts: false
+          staticFiles: false
 ```
+
+`detect.staticPorts: false` stops probing the common-port list and leaves only
+real listeners; `detect.staticFiles: false` stops offering the workspace's own
+HTML pages. `detect.extraPorts` adds ports people run on by habit.
 
 The repository also includes [`dsh-app-bridge`](packages/dsh-app-bridge/README.md)
 for the narrower case where an app must be mounted at a fixed path on the

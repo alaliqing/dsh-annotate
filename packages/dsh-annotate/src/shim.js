@@ -163,6 +163,9 @@
 
   // ---- navigation reporting ----------------------------------------------
   function upstreamHref() {
+    // A static file target has no upstream routes: the file is the address, and
+    // only a hash route can be represented on top of it.
+    if (cfg.page) return cfg.page + (location.hash || '')
     var href = location.href
     if (href.indexOf(PROXIED) !== 0) return href
     var rest = href.slice(PROXIED.length)

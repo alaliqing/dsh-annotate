@@ -24,8 +24,8 @@ import http from 'node:http'
 import https from 'node:https'
 import { execFile } from 'node:child_process'
 import { readFileSync, realpathSync, statSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { readFile, readdir, realpath, stat } from 'node:fs/promises'
+import { basename, dirname, extname, isAbsolute, join, resolve, sep } from 'node:path'
 
 export const name = 'dsh-annotate'
 
@@ -41,6 +41,62 @@ const LOG_LIMIT = 400
 /** Ports people actually run dev servers on, probed even when the OS tells us
  *  nothing (no lsof, locked-down container). */
 const COMMON_PORTS = [5173, 3000, 4173, 5180, 8080, 8000, 5000, 5500, 9000, 3001, 1234, 4200, 4321, 5174, 6006, 7000, 8001, 8888]
+
+/** COMMON_PORTS is a preference order, not a list of answers: anything absent
+ *  from it ranks last and then by port number. */
+const commonRank = (port) => {
+  const index = COMMON_PORTS.indexOf(port)
+  return index === -1 ? COMMON_PORTS.length : index
+}
+
+/** Where a built or hand-written page lives, relative to the session workspace,
+ *  in the order they are offered. A static page needs no dev server at all. */
+const STATIC_DIRS = ['', 'dist', 'build', 'out', 'public']
+const STATIC_PAGE_LIMIT = 24
+/** Bound on one static response, so a stray large file cannot be buffered into
+ *  the proxy's memory. */
+const STATIC_FILE_LIMIT = 64 * 1024 * 1024
+const STATIC_MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.htm': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.csv': 'text/csv; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.wasm': 'application/wasm',
+  '.pdf': 'application/pdf',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+}
+const staticMime = (file) => STATIC_MIME[extname(file).toLowerCase()] || 'application/octet-stream'
+const isHtmlFile = (file) => /\.html?$/i.test(file)
+
+/** Both paths are absolute and already resolved, so a prefix test is exact. */
+function insideRoot(target, root) {
+  if (!target || !root) return false
+  if (target === root) return true
+  return target.startsWith(root.endsWith(sep) ? root : root + sep)
+}
+
+/** Dot segments are VCS metadata, environment files and editor state; none of
+ *  them belong in a preview, and `..` fails this test too. */
+const hasHiddenSegment = (pathname) => pathname.split('/').some((part) => part.startsWith('.'))
 
 const HOP_BY_HOP = new Set([
   'connection',
@@ -200,11 +256,14 @@ function run(file, args, timeout = 4000) {
   })
 }
 
-/** Loopback TCP listeners, three ways, none of them required. */
+/** Loopback TCP listeners, three ways, none of them required. When the tool
+ *  knows the owning process, so does the caller: `pids` is what lets a service
+ *  be claimed by the workspace it was started from. */
 async function listeningPorts() {
   const ports = new Set()
+  const pids = new Map()
 
-  // Linux: /proc needs no process spawn.
+  // Linux: /proc needs no process spawn, but names no owner either.
   for (const file of ['/proc/net/tcp', '/proc/net/tcp6']) {
     try {
       const text = await readFile(file, 'utf8')
@@ -219,12 +278,17 @@ async function listeningPorts() {
     }
   }
 
-  // macOS/BSD: lsof knows the addresses, so loopback-only is decidable.
+  // macOS/BSD: lsof knows the addresses, so loopback-only is decidable, and it
+  // is also the only source of the owning PID on either platform.
   const lsof = await run('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN'])
   for (const line of lsof.split('\n')) {
     if (!/LISTEN/.test(line)) continue
     const match = line.match(/(?:127\.0\.0\.1|\*|\[::1\]|localhost):(\d+)/)
-    if (match) ports.add(Number(match[1]))
+    if (!match) continue
+    const port = Number(match[1])
+    ports.add(port)
+    const owner = Number(line.trim().split(/\s+/)[1])
+    if (Number.isInteger(owner) && owner > 0) pids.set(port, owner)
   }
 
   // Anything else: netstat is ubiquitous.
@@ -237,7 +301,7 @@ async function listeningPorts() {
     }
   }
 
-  return [...ports].filter((value) => Number.isInteger(value) && value > 0 && value < 65536)
+  return { ports: [...ports].filter((value) => Number.isInteger(value) && value > 0 && value < 65536), pids }
 }
 
 function titleOf(html) {
@@ -261,6 +325,201 @@ async function probePort(value, timeoutMs) {
     } catch { /* Try IPv6 when a dev server listens only on ::1. */ }
   }
   return null
+}
+
+/** Where each listening process was started. `/proc` answers without a spawn;
+ *  lsof covers macOS and BSD. No answer only means the service cannot be
+ *  claimed by a workspace — never that it is unusable. */
+async function processCwds(pids) {
+  const cwds = new Map()
+  const rest = []
+  for (const pid of pids) {
+    try {
+      cwds.set(pid, realpathSync(`/proc/${pid}/cwd`))
+    } catch (error) {
+      void error
+      rest.push(pid)
+    }
+  }
+  if (rest.length) {
+    const text = await run('lsof', ['-a', '-p', rest.join(','), '-d', 'cwd', '-Fn'])
+    let pid = 0
+    for (const line of text.split('\n')) {
+      if (line.startsWith('p')) pid = Number(line.slice(1))
+      else if (line.startsWith('n') && pid) cwds.set(pid, line.slice(1))
+    }
+  }
+  return cwds
+}
+
+/** Ports the workspace asks for itself — `--port 5180` in a script, `port:` in
+ *  a Vite config. A hint only: the port still has to be listening to appear. */
+async function declaredProjectPorts(root) {
+  const declared = new Set()
+  if (!root) return declared
+  const sources = []
+  try {
+    sources.push(await readFile(join(root, 'package.json'), 'utf8'))
+  } catch (error) {
+    void error
+  }
+  for (const name of ['vite.config.ts', 'vite.config.js', 'vite.config.mts', 'vite.config.mjs', 'vite.config.cts', 'vite.config.cjs']) {
+    try {
+      sources.push(await readFile(join(root, name), 'utf8'))
+    } catch (error) {
+      void error
+    }
+  }
+  for (const text of sources) {
+    for (const [, value] of text.matchAll(/--port[=\s]+(\d{2,5})/g)) declared.add(Number(value))
+    for (const [, value] of text.matchAll(/\bPORT\s*[:=]\s*['"]?(\d{2,5})/g)) declared.add(Number(value))
+    for (const [, value] of text.matchAll(/\bport\s*:\s*(\d{2,5})/g)) declared.add(Number(value))
+  }
+  return declared
+}
+
+/** HTML pages the workspace already contains, so a project that needs no server
+ *  — or whose server is not running — can still be annotated. */
+async function staticCandidates(root) {
+  const pages = []
+  if (!root) return pages
+  const seen = new Set()
+  for (const dir of STATIC_DIRS) {
+    const base = dir ? join(root, dir) : root
+    let entries
+    try {
+      entries = await readdir(base, { withFileTypes: true })
+    } catch (error) {
+      void error
+      continue
+    }
+    const names = entries.filter((entry) => entry.isFile() && isHtmlFile(entry.name)).map((entry) => entry.name)
+    names.sort((a, b) => (a.toLowerCase() === 'index.html' ? 0 : 1) - (b.toLowerCase() === 'index.html' ? 0 : 1) || a.localeCompare(b))
+    for (const name of names) {
+      if (pages.length >= STATIC_PAGE_LIMIT) return pages
+      let real
+      try {
+        real = await realpath(join(base, name))
+      } catch (error) {
+        void error
+        continue
+      }
+      if (seen.has(real)) continue
+      seen.add(real)
+      pages.push({ rel: dir ? `${dir}/${name}` : name, path: real })
+    }
+  }
+  return pages
+}
+
+/** The file a static request resolves to: inside the root, a regular file, and
+ *  never a directory. Symlinks are resolved before the containment test. */
+async function existingFile(file, root) {
+  let real
+  try {
+    real = await realpath(file)
+  } catch (error) {
+    void error
+    return null
+  }
+  if (!insideRoot(real, root)) return null
+  try {
+    const info = await stat(real)
+    if (!info.isFile()) return null
+    return { path: real, size: info.size }
+  } catch (error) {
+    void error
+    return null
+  }
+}
+
+/** Read-only file server for one directory: the loopback origin a static page
+ *  needs before the preview proxy can read and inject into it. */
+async function serveStatic(req, res, root) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { allow: 'GET, HEAD' })
+    res.end()
+    return
+  }
+  let pathname
+  try {
+    pathname = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname)
+  } catch (error) {
+    void error
+    res.writeHead(400)
+    res.end()
+    return
+  }
+  if (hasHiddenSegment(pathname)) {
+    res.writeHead(403)
+    res.end()
+    return
+  }
+  const requested = resolve(root, '.' + (pathname.charAt(0) === '/' ? pathname : '/' + pathname))
+  if (!insideRoot(requested, root)) {
+    res.writeHead(403)
+    res.end()
+    return
+  }
+  // The file itself, then a directory's index, then — for a client-side route
+  // with no extension — the root page, which is what keeps an SPA navigable.
+  let target = await existingFile(requested, root)
+  if (!target) target = await existingFile(join(requested, 'index.html'), root)
+  if (!target && !extname(pathname) && String(req.headers.accept || '').includes('html')) {
+    target = await existingFile(join(root, 'index.html'), root)
+  }
+  if (!target) {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+    res.end('not found')
+    return
+  }
+  if (target.size > STATIC_FILE_LIMIT) {
+    res.writeHead(413, { 'content-type': 'text/plain; charset=utf-8' })
+    res.end('file too large for a preview')
+    return
+  }
+  res.writeHead(200, {
+    'content-type': staticMime(target.path),
+    'content-length': String(target.size),
+    'cache-control': 'no-store',
+  })
+  if (req.method === 'HEAD') {
+    res.end()
+    return
+  }
+  res.end(await readFile(target.path))
+}
+
+/** A `file://` target is previewable only when it is an HTML file inside the
+ *  session workspace: nothing outside it may be read, and only a page can be
+ *  annotated. */
+function resolveFileTarget(raw, root) {
+  let url
+  try {
+    url = new URL(String(raw))
+  } catch (error) {
+    void error
+    return { code: 'notLocalTarget' }
+  }
+  if (url.protocol !== 'file:' || url.host) return { code: 'notLocalTarget' }
+  let path
+  try {
+    path = realpathSync(decodeURIComponent(url.pathname))
+  } catch (error) {
+    void error
+    return { code: 'staticUnavailable' }
+  }
+  if (!insideRoot(path, root)) return { code: 'notAllowedFile' }
+  let info
+  try {
+    info = statSync(path)
+  } catch (error) {
+    void error
+    return { code: 'staticUnavailable' }
+  }
+  if (!info.isFile()) return { code: 'staticUnavailable' }
+  if (!isHtmlFile(path)) return { code: 'notHtmlFile' }
+  return { dir: dirname(path), name: basename(path) }
 }
 
 /** How to start something, read from the session workspace. */
@@ -312,9 +571,36 @@ export function apply(ctx, config = {}) {
   const detectCacheMs = Number(config.detect?.cacheMs) || 2000
   const extraPorts = Array.isArray(config.detect?.extraPorts) ? config.detect.extraPorts.map(Number) : []
   const staticPorts = config.detect?.staticPorts === false ? [] : COMMON_PORTS
+  const staticFiles = config.detect?.staticFiles !== false
   const detections = new Map()
   const previews = new Map()
+  const staticServers = new Map()
   ctx.effect(() => () => { for (const promise of previews.values()) void promise.then((entry) => { entry.close() }).catch(() => {}) })
+  ctx.effect(() => () => { for (const entry of staticServers.values()) entry.close() })
+
+  /** One read-only file server per directory, started the first time a page in
+   *  it is previewed. It exists so a static file has a loopback origin for the
+   *  proxy to read: an iframe cannot be injected through `file://`. */
+  const staticServer = async (dir) => {
+    let entry = staticServers.get(dir)
+    if (!entry) {
+      const server = http.createServer((req, res) => {
+        // Only the exact address this server bound may read it, so a
+        // DNS-rebinding page cannot reach the workspace through this origin.
+        if (req.headers.host !== `127.0.0.1:${server.address().port}`) { res.writeHead(403); res.end(); return }
+        void serveStatic(req, res, dir).catch((error) => {
+          void error
+          try { res.destroy() } catch (inner) { void inner }
+        })
+      })
+      const sockets = new Set()
+      server.on('connection', (socket) => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)) })
+      await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })
+      entry = { origin: `http://127.0.0.1:${server.address().port}`, close() { for (const socket of sockets) socket.destroy(); server.close() } }
+      staticServers.set(dir, entry)
+    }
+    return entry
+  }
 
   const entryFor = (sid) => {
     const key = sid || '__root__'
@@ -432,28 +718,33 @@ export function apply(ctx, config = {}) {
     const cached = detections.get(key)
     if (!args?.force && cached && Date.now() - cached.at < detectCacheMs) return cached.value
 
+    const root = existingDirectory(args && args.root)
     const selfPort = hostPort(req.headers.host)
     const previewPorts = new Set((await Promise.all([...previews.values()])).map((entry) => Number(new URL(entry.origin).port)))
-    const found = await listeningPorts()
+    const { ports: found, pids } = await listeningPorts()
+    const declared = await declaredProjectPorts(root)
+    const cwds = await processCwds([...new Set(pids.values())])
+    // A service belongs to the workspace when the process listening on it was
+    // started inside that workspace.
+    const owned = new Set([...pids].filter(([, pid]) => insideRoot(cwds.get(pid), root)).map(([port]) => port))
     const candidates = [...new Set([...found, ...extraPorts, ...staticPorts])]
       .filter((value) => Number.isInteger(value) && value > 0 && value < 65536 && value !== selfPort && !previewPorts.has(value))
-      .sort((a, b) => {
-        const ai = COMMON_PORTS.indexOf(a)
-        const bi = COMMON_PORTS.indexOf(b)
-        if (ai === -1 && bi === -1) return a - b
-        if (ai === -1) return 1
-        if (bi === -1) return -1
-        return ai - bi
-      })
+      .sort((a, b) => commonRank(a) - commonRank(b) || a - b)
 
     const probed = []
     for (let i = 0; i < candidates.length; i += 16) {
       probed.push(...await Promise.all(candidates.slice(i, i + 16).map((value) => probePort(value, probeTimeoutMs))))
     }
+    // The workspace's own services first, then the ports it asks for, then the
+    // common-port preference: one list, in the order people want to see it.
+    const services = probed.filter(Boolean)
+      .map((service) => ({ ...service, project: owned.has(service.port), declared: declared.has(service.port) }))
+      .sort((a, b) => Number(b.project) - Number(a.project) || Number(b.declared) - Number(a.declared) || commonRank(a.port) - commonRank(b.port) || a.port - b.port)
     const value = {
       ok: true,
-      services: probed.filter(Boolean),
-      hint: await startupHint(existingDirectory(args && args.root)),
+      services,
+      files: staticFiles ? await staticCandidates(root) : [],
+      hint: await startupHint(root),
       scanned: candidates.length,
       at: Date.now(),
     }
@@ -490,18 +781,34 @@ export function apply(ctx, config = {}) {
         })
       }
       if (method === 'preview') {
-        const target = new URL(args.url)
-        if (!isLocalTarget(target) || Number(target.port) === hostPort(req.headers.host)) return send(res, 400, { ok: false, code: 'notLocalTarget', error: 'local development services only; Harness itself cannot be previewed' })
+        const raw = String(args.url || '')
+        let target
+        let suffix
+        let page = null
+        if (/^file:/i.test(raw)) {
+          const resolved = resolveFileTarget(raw, existingDirectory(args.root))
+          if (resolved.code) return send(res, 400, { ok: false, code: resolved.code, error: 'that file cannot be previewed' })
+          const server = await staticServer(resolved.dir)
+          // The page's own directory is the static root, so its relative scripts
+          // and styles resolve exactly as they do on disk.
+          target = new URL(server.origin + '/')
+          suffix = '/' + encodeURIComponent(resolved.name)
+          page = raw
+        } else {
+          try { target = new URL(raw) } catch (error) { void error; target = null }
+          if (!target || !isLocalTarget(target) || Number(target.port) === hostPort(req.headers.host)) return send(res, 400, { ok: false, code: 'notLocalTarget', error: 'local development services only; Harness itself cannot be previewed' })
+          suffix = target.pathname + target.search + target.hash
+        }
         const parentOrigin = requestOrigin(req)
         const key = String(sid) + ':' + target.origin
         if (!previews.has(key)) {
           if (previews.size >= 24) return send(res, 429, { ok: false, code: 'tooManyPreviews', error: 'too many previews; restart the plugin to release the idle ones' })
-          const promise = createPreview(target, String(sid || ''), parentOrigin)
+          const promise = createPreview(target, String(sid || ''), parentOrigin, page)
           previews.set(key, promise)
           promise.catch(() => previews.delete(key))
         }
         const entry = await previews.get(key)
-        return send(res, 200, { ok: true, url: entry.origin + target.pathname + target.search + target.hash, origin: entry.origin })
+        return send(res, 200, { ok: true, url: entry.origin + suffix, origin: entry.origin })
       }
       if (method === 'detect') return send(res, 200, await detect(sid, args, req))
       if (method === 'start') return send(res, 200, await start(sid, existingDirectory(args.root)))
@@ -667,7 +974,7 @@ function proxyHttp(req, res, preview) {
       upstreamRes.on('end', () => {
         const html = Buffer.concat(chunks).toString('utf8')
         const body = Buffer.from(
-          injectIntoHtml(html, { upstream: origin, prefix: '/', relay: WS_RELAY_PATH, enc, isolated: true, parentOrigin: preview.parentOrigin, session: preview.sid }),
+          injectIntoHtml(html, { upstream: origin, page: preview.page, prefix: '/', relay: WS_RELAY_PATH, enc, isolated: true, parentOrigin: preview.parentOrigin, session: preview.sid }),
           'utf8'
         )
         out['content-length'] = String(body.length)
@@ -768,9 +1075,11 @@ function proxyUpgrade(req, socket, head) {
 /** A dedicated loopback origin preserves app paths and separates app DOM and
  * storage from Harness. Nothing outside loopback may be used as an upstream.
  * Servers are keyed by session + app and disposed with the plugin. */
-async function createPreview(target, sid, parentOrigin) {
+async function createPreview(target, sid, parentOrigin, page) {
   const hostname = new URL(parentOrigin).hostname === 'localhost' ? '127.0.0.1' : 'localhost'
-  const preview = { target: new URL(target.origin), sid, parentOrigin }
+  // `page` is the canonical address of a static target: a file URL has no
+  // upstream route for a proxied path to map back onto.
+  const preview = { target: new URL(target.origin), sid, parentOrigin, page: page || null }
   const originOfPreview = () => `http://${hostname}:${server.address().port}`
   const server = http.createServer((req, res) => {
     // Only the preview's own hostname is served, so a DNS-rebinding page cannot
