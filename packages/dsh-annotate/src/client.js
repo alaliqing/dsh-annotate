@@ -666,10 +666,10 @@ function apply(ctx) {
       void runDetect(panel, { auto: false })
     }
 
+    /** The overlay owns the mode (it may be mid-card), so ask it to toggle and
+     *  let its `mode` message update this button. */
     const toggleMode = () => {
-      const next = state.mode === 'picking' ? 'idle' : 'picking'
-      panel.model.set({ mode: next })
-      notify('set-mode', { mode: next })
+      notify('toggle-mode')
     }
 
     const notice = state.notice
@@ -1028,8 +1028,12 @@ function apply(ctx) {
 
   // ⌘⇧B mirrors Codex's in-app browser; ⌘⇧A stays as an alias.
   const onKeyDown = (event) => {
-    if (event.key === 'Escape' && activePanel && activePanel.model.get().mode !== 'idle') {
-      activePanel.model.set({ mode: 'idle', helpOpen: false })
+    if (event.key === 'Escape' && activePanel) {
+      if (activePanel.model.get().helpOpen) {
+        activePanel.model.set({ helpOpen: false })
+        return
+      }
+      activePanel.model.set({ mode: 'idle' })
       notify('set-mode', { mode: 'idle' })
       return
     }
