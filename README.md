@@ -199,6 +199,16 @@ sidebar-tab flow (auto-start → preview → annotate → send). See
 [DEVELOPING.md](DEVELOPING.md) for the restart matrix, the config reference and
 the fixture's ground rules.
 
+## Direction
+
+The target shape is Codex's in-app browser rather than "preview this project":
+open any URL in the sidebar, annotate what is on screen, send the comments.
+Today the plugin only annotates Same-Origin pages and needs a project to be
+configured; [docs/PLAN-sidebar-browser.md](docs/PLAN-sidebar-browser.md) lays out
+the move to a zero-config proxy, real navigation, URL suggestions, and a
+one-package install — plus the one limit no web page can cross (a cross-origin
+iframe's DOM is unreadable; a browser extension is the only full escape hatch).
+
 ## Status
 
 Private tooling, not published. MIT licensed, see [LICENSE](LICENSE) and
