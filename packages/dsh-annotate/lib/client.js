@@ -9,15 +9,14 @@ window.__ModuleLoader__.load({
 /**
  * dsh-annotate — Client half.
  *
- * A native RIGHT-SIDEBAR TAB that previews a Same-Origin dev server (see the
- * dsh-app-bridge plugin), lets you pick elements and write notes on them, and
- * hands the result to the composer as one structured block.
+ * The right-sidebar tab has two faces:
  *
- * The shape follows the shipped sidebar contract and the reference design of
- * Codex's in-app browser: the preview lives in the work surface next to the
- * conversation rather than in a floating card, annotation mode turns element
- * hits into comments, ⌘/Ctrl-click submits immediately, and the tab body is a
- * flat column of the page in the conversation's own colours and font sizes.
+ *  - **list** — the local web servers that are actually running, discovered by
+ *    the host half; one click opens one (a lone find opens itself). Nothing to
+ *    configure, nothing to type. If nothing is up, it says what to run.
+ *  - **page** — the opened page, proxied onto the harness origin so its DOM is
+ *    readable, with element picking, comments, live style tweaks and one
+ *    structured block into the composer.
  *
  * Bundled by build.mjs into the ModuleLoader format; `OVERLAY_SRC` is injected
  * there.
@@ -26,29 +25,17 @@ const inject = ['timer']
 
 const CHANNEL_IN = 'dsh-annotate-overlay'
 const CHANNEL_OUT = 'dsh-annotate-panel'
+const PAGE_CHANNEL = 'dsh-annotate-page'
 const KIND = 'annotate'
 const TAB_ID = 'dsh-annotate'
 const MARKER = '#f0a05a'
-/** Only a first-paint fallback: the host half reports the configured base. */
-const FALLBACK_BASE = '/app/'
-
-/** The preview lives on the harness origin (same-origin bridge), under whatever
- *  base the profile configured. */
-const sameOriginUrl = (base) => location.origin + normalizeClientBase(base)
-
-function normalizeClientBase(value) {
-  const raw = String(value === undefined || value === null || value === '' ? FALLBACK_BASE : value).trim()
-  if (!raw || raw === '/') return '/'
-  const withLead = raw.startsWith('/') ? raw : '/' + raw
-  return withLead.endsWith('/') ? withLead : withLead + '/'
-}
 
 const PANEL_CSS = `
 /* A column of the page, not a card over it: no radius, no shadow, no glass —
    the sidebar owns the surface, the tab owns its content insets. */
 .dsa-col { display:flex; flex-direction:column; height:100%; min-height:0; color:var(--dsw-alias-label-primary,#e8eaed);
   font:12.5px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
-.dsa-bar { display:flex; align-items:center; gap:6px; padding:8px 10px; flex:none;
+.dsa-bar { display:flex; align-items:center; gap:5px; padding:8px 10px; flex:none;
   border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent); }
 .dsa-bar .dsa-url { flex:1; min-width:0; height:26px; padding:0 9px; border-radius:6px; outline:none;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:inherit;
@@ -57,38 +44,63 @@ const PANEL_CSS = `
 .dsa-bar .dsa-url:focus { border-color:${MARKER}; }
 .dsa-ico { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; padding:0; flex:none;
   border:1px solid transparent; border-radius:6px; background:transparent; color:var(--dsw-alias-label-secondary,#9aa0a6); cursor:pointer; }
-.dsa-ico:hover { background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 8%,transparent); color:var(--dsw-alias-label-primary,#e8eaed); }
+.dsa-ico:hover:not(:disabled) { background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 8%,transparent); color:var(--dsw-alias-label-primary,#e8eaed); }
+.dsa-ico:disabled { opacity:.35; cursor:default }
 .dsa-ico[data-on="true"] { color:${MARKER}; border-color:color-mix(in srgb,${MARKER} 45%,transparent); background:color-mix(in srgb,${MARKER} 12%,transparent); }
 .dsa-ico svg { width:15px; height:15px }
 .dsa-send { height:26px; padding:0 10px; border-radius:6px; cursor:pointer; white-space:nowrap; font-size:11.5px; flex:none;
   background:${MARKER}; border:1px solid transparent; color:#20160c; font-weight:600; }
 .dsa-send:hover { opacity:.9 }
 .dsa-send:disabled { opacity:.42; cursor:default }
-.dsa-status { display:inline-flex; align-items:center; gap:5px; font-size:10.5px; color:var(--dsw-alias-label-secondary,#9aa0a6);
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; white-space:nowrap }
-.dsa-status i { width:6px; height:6px; border-radius:50%; background:color-mix(in srgb,var(--dsw-alias-label-secondary,#9aa0a6) 70%,transparent) }
-.dsa-status[data-state="running"] i { background:#4bbf7a; box-shadow:0 0 0 3px color-mix(in srgb,#4bbf7a 22%,transparent) }
-.dsa-status[data-state="starting"] i { background:${MARKER}; animation:dsa-blink 1s ease-in-out infinite }
-.dsa-status[data-state="error"] i { background:var(--dsw-alias-state-error-primary,#ff6b6b) }
-@keyframes dsa-blink { 50% { opacity:.35 } }
-.dsa-log { flex:none; max-height:150px; display:flex; flex-direction:column;
-  border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent) }
-.dsa-loghead { display:flex; align-items:center; gap:8px; padding:5px 8px 5px 10px; font-size:10.5px;
-  color:var(--dsw-alias-label-secondary,#9aa0a6); border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 6%,transparent) }
-.dsa-loghead .dsa-btn { height:22px; padding:0 8px; font-size:11px }
-.dsa-log pre { margin:0; padding:6px 10px; overflow:auto; font-size:10.5px; line-height:1.5;
-  color:var(--dsw-alias-label-secondary,#9aa0a6); white-space:pre-wrap; word-break:break-all }
 .dsa-count { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; color:var(--dsw-alias-label-secondary,#9aa0a6); padding-inline:2px }
 
-.dsa-notice { flex:none; padding:7px 11px; font-size:11.5px; line-height:1.5; color:${MARKER};
+.dsa-notice { flex:none; display:flex; align-items:center; gap:8px; padding:7px 11px; font-size:11.5px; line-height:1.5; color:${MARKER};
   background:color-mix(in srgb,${MARKER} 12%,transparent); border-bottom:1px solid color-mix(in srgb,${MARKER} 30%,transparent); }
+.dsa-notice button { all:unset; cursor:pointer; margin-left:auto; color:inherit; opacity:.7; flex:none }
+.dsa-notice button:hover { opacity:1 }
+
+/* ---- list face ---- */
+.dsa-listwrap { flex:1; min-height:0; overflow:auto }
+.dsa-sechead { display:flex; align-items:center; gap:8px; padding:11px 11px 6px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--dsw-alias-label-secondary,#9aa0a6) }
+.dsa-sechead .dsa-ico { margin-left:auto; width:22px; height:22px }
+.dsa-svc { display:flex; align-items:center; gap:10px; width:100%; padding:9px 11px; text-align:left; cursor:pointer;
+  background:transparent; border:0; border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 5%,transparent);
+  color:inherit; font:inherit }
+.dsa-svc:hover { background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 4%,transparent) }
+.dsa-svc .dot { width:7px; height:7px; border-radius:50%; flex:none; background:#4bbf7a; box-shadow:0 0 0 3px color-mix(in srgb,#4bbf7a 20%,transparent) }
+.dsa-svc .copy { flex:1; min-width:0 }
+.dsa-svc .copy b { display:block; font-size:12.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.dsa-svc .copy span { display:block; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px;
+  color:var(--dsw-alias-label-secondary,#9aa0a6); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.dsa-svc .go { flex:none; font-size:11px; color:${MARKER}; opacity:0 }
+.dsa-svc:hover .go { opacity:1 }
+
+.dsa-openrow { display:flex; gap:6px; align-items:center; padding:10px 11px;
+  border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent) }
+.dsa-openrow input { flex:1; min-width:0; height:28px; padding:0 9px; border-radius:6px; outline:none; color:inherit;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px;
+  background:color-mix(in srgb,var(--dsw-alias-bg-base,#0d1117) 38%,transparent);
+  border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 12%,transparent) }
+.dsa-openrow input:focus { border-color:${MARKER} }
+.dsa-openrow button { height:28px; padding:0 11px; border-radius:6px; cursor:pointer; font-size:11.5px; flex:none;
+  background:${MARKER}; border:0; color:#20160c; font-weight:600 }
+.dsa-hintbox { padding:12px 12px 16px; color:var(--dsw-alias-label-secondary,#9aa0a6); font-size:11.5px; line-height:1.6 }
+.dsa-hintbox p { margin:0 0 8px }
+.dsa-cmd { display:flex; align-items:center; gap:8px; padding:6px 8px; margin-bottom:5px; border-radius:6px;
+  background:color-mix(in srgb,var(--dsw-alias-bg-base,#0d1117) 40%,transparent);
+  border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 8%,transparent) }
+.dsa-cmd code { flex:1; min-width:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--dsw-alias-label-primary,#e8eaed) }
+.dsa-cmd button { all:unset; cursor:pointer; font-size:10.5px; color:${MARKER}; flex:none }
 
 .dsa-stage { position:relative; flex:1; min-height:0; background:#fff }
 .dsa-frame { width:100%; height:100%; border:0; display:block }
 .dsa-stagefoot { position:absolute; left:0; right:0; bottom:0; display:flex; gap:8px; align-items:center;
-  padding:3px 8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; letter-spacing:.06em;
-  color:rgba(255,255,255,.88); background:linear-gradient(0deg,rgba(0,0,0,.6),transparent); pointer-events:none }
-.dsa-stagefoot i { width:6px; height:6px; border-radius:50%; background:${MARKER}; box-shadow:0 0 0 3px color-mix(in srgb,${MARKER} 25%,transparent) }
+  padding:3px 8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; letter-spacing:.04em;
+  color:rgba(255,255,255,.9); background:linear-gradient(0deg,rgba(0,0,0,.62),transparent); pointer-events:none }
+.dsa-stagefoot i { width:6px; height:6px; border-radius:50%; background:${MARKER}; box-shadow:0 0 0 3px color-mix(in srgb,${MARKER} 25%,transparent); flex:none }
+.dsa-stagefoot span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 
 .dsa-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
   padding:26px; text-align:center; color:var(--dsw-alias-label-secondary,#9aa0a6);
@@ -97,15 +109,8 @@ const PANEL_CSS = `
 .dsa-empty p { margin:0; max-width:330px; font-size:12px; line-height:1.65 }
 .dsa-empty code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; padding:2px 5px; border-radius:4px;
   background:color-mix(in srgb,${MARKER} 14%,transparent); color:${MARKER} }
-.dsa-target { position:relative; width:112px; height:70px }
-.dsa-target i { position:absolute; width:12px; height:12px; border:2px solid ${MARKER} }
-.dsa-target i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0}
-.dsa-target i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0}
-.dsa-target i:nth-child(3){left:0;bottom:0;border-right:0;border-top:0}
-.dsa-target i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0}
-.dsa-target::after { content:''; position:absolute; inset:0; border:1px dashed color-mix(in srgb,${MARKER} 55%,transparent) }
 
-.dsa-list { flex:none; max-height:42%; min-height:92px; overflow:auto;
+.dsa-list { flex:none; max-height:40%; min-height:0; overflow:auto;
   border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent) }
 .dsa-item { display:flex; gap:9px; padding:9px 11px; border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 5%,transparent) }
 .dsa-item:hover { background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 4%,transparent) }
@@ -157,12 +162,12 @@ function injectStyles(text) {
 const ICONS = {
   marker: 'M3 17.2 14.4 5.8a2 2 0 0 1 2.8 0l1 1a2 2 0 0 1 0 2.8L6.8 21H3z',
   refresh: 'M13.6 4.2a6.8 6.8 0 1 0 6.4 8.5h-2a4.8 4.8 0 1 1-4.4-6.5V9l4-3.4z',
+  back: 'M14.5 5 7.5 12l7 7',
+  forward: 'M9.5 5l7 7-7 7',
+  list: 'M4 6h16v2H4zM4 11h16v2H4zM4 16h16v2H4z',
   locate: 'M12 2v3m0 14v3M2 12h3m14 0h3M12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2z',
   trash: 'M6 7h12l-1 13H7zM9 4h6l1 2H8z',
   external: 'M14 4h6v6h-2V7.4l-7.3 7.3-1.4-1.4L16.6 6H14zM5 6h5v2H7v9h9v-3h2v5H5z',
-  play: 'M8 5.5 18 12 8 18.5z',
-  stop: 'M7 7h10v10H7z',
-  log: 'M5 6h14v2H5zM5 11h14v2H5zM5 16h9v2H5z',
 }
 
 function Icon(props) {
@@ -215,6 +220,28 @@ function payloadBlock(annotations, page, viewport) {
   return head + '\n' + annotations.map((ann, i) => payloadOf(ann, i)).join('\n\n')
 }
 
+const encodeTarget = (origin) => btoa(origin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
+/** Accept what people actually type: `5173`, `:5173`, `localhost:3000/x`, a URL. */
+function normalizeAddress(text) {
+  const raw = String(text || '').trim()
+  if (!raw) return null
+  let candidate = raw
+  if (/^\d+$/.test(candidate)) candidate = `http://127.0.0.1:${candidate}/`
+  else if (candidate.startsWith(':')) candidate = `http://127.0.0.1${candidate}`
+  else if (!/^[a-z]+:\/\//i.test(candidate)) candidate = `http://${candidate}`
+  try {
+    const url = new URL(candidate)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+    return url.href
+  } catch (error) {
+    return null
+  }
+}
+
+const isLoopback = (hostname) => /^(127\.0\.0\.1|localhost|\[::1\]|::1)$/.test(hostname)
+
+
 function apply(ctx) {
   const slots = ctx.get('slots')
   if (slots === undefined) return
@@ -250,41 +277,34 @@ function apply(ctx) {
       panel = {
         sid: key,
         model: makeModel({
-          base: FALLBACK_BASE,
-          command: 'npm run dev:panel',
-          url: FALLBACK_BASE,
-          draftUrl: FALLBACK_BASE,
+          view: 'list',
+          services: [],
+          detect: 'idle',
+          scanned: 0,
+          hint: null,
+          url: '',
+          input: '',
+          src: '',
+          history: [],
+          index: -1,
           annotations: [],
           viewport: { w: 0, h: 0 },
-          page: FALLBACK_BASE,
+          page: '',
           mode: 'idle',
           cors: false,
           pending: [],
           notice: null,
-          status: 'idle', // idle | starting | running | error
-          statusText: '',
+          proxyPrefix: '/__dsh_anno',
+          command: null,
           log: [],
-          logOpen: false,
           root: '',
-          hostUrl: '',
         }),
         draftWriter: null,
+        noticeTimer: null,
       }
       panels.set(key, panel)
     }
     return panel
-  }
-
-  let frameRef = null
-
-  const notify = (type, payload) => {
-    const frame = frameRef
-    if (!frame || !frame.contentWindow) return
-    try {
-      frame.contentWindow.postMessage(Object.assign({ source: CHANNEL_OUT, type: type }, payload || {}), '*')
-    } catch (error) {
-      void error
-    }
   }
 
   const api = async (method, args) => {
@@ -300,11 +320,87 @@ function apply(ctx) {
     }
   }
 
+  let frameRef = null
+
+  const notify = (type, payload) => {
+    const frame = frameRef
+    if (!frame || !frame.contentWindow) return
+    try {
+      frame.contentWindow.postMessage(Object.assign({ source: CHANNEL_OUT, type: type }, payload || {}), '*')
+    } catch (error) {
+      void error
+    }
+  }
+
   const openAnnotate = () => {
     try {
       if (sidebarRight && typeof sidebarRight.openTab === 'function') sidebarRight.openTab(KIND)
     } catch (error) {
       console.warn('dsh-annotate: could not open the sidebar tab', error)
+    }
+  }
+
+  const flash = (panel, message) => {
+    panel.model.set({ notice: message })
+    if (panel.noticeTimer) clearTimeout(panel.noticeTimer)
+    panel.noticeTimer = setTimeout(() => panel.model.set({ notice: null }), 6000)
+  }
+
+  const proxyUrlFor = (panel, upstreamUrl) => {
+    const url = new URL(upstreamUrl)
+    const prefix = panel.model.get().proxyPrefix || '/__dsh_anno'
+    return location.origin + prefix + '/' + encodeTarget(url.origin) + url.pathname + url.search + url.hash
+  }
+
+  /** Open a page: harness-origin URLs load directly, everything else through the
+   *  loopback proxy (which is what makes its DOM readable). */
+  const openUpstream = (panel, raw, options) => {
+    const push = !options || options.push !== false
+    const url = normalizeAddress(raw)
+    if (!url) {
+      flash(panel, '这个地址看不出来是什么，试试 localhost:5173 或直接输 5173')
+      return false
+    }
+    const parsed = new URL(url)
+    const direct = parsed.origin === location.origin
+    const state = panel.model.get()
+    const history = push ? state.history.slice(0, state.index + 1).concat([url]) : state.history
+    panel.model.set({
+      view: 'page',
+      url: url,
+      input: url,
+      src: direct ? url : proxyUrlFor(panel, url),
+      history: history.slice(-40),
+      index: Math.min(history.length - 1, 39),
+      mode: 'idle',
+      cors: false,
+      annotations: state.url === url ? state.annotations : [],
+      page: parsed.pathname,
+      notice: isLoopback(parsed.hostname) ? null : '非本地地址：代理只是尽力而为（登录态与严格 CSP 可能失效）',
+    })
+    return true
+  }
+
+  const runDetect = async (panel, options) => {
+    const auto = !options || options.auto !== false
+    const state = panel.model.get()
+    panel.model.set({ detect: 'busy' })
+    const res = await api('detect', { sid: panel.sid, root: state.root })
+    if (!res || !res.ok) {
+      panel.model.set({ detect: 'error' })
+      flash(panel, '检测失败：' + ((res && res.error) || '未知错误'))
+      return
+    }
+    panel.model.set({
+      services: res.services || [],
+      hint: res.hint || null,
+      scanned: res.scanned || 0,
+      detect: 'idle',
+    })
+    const current = panel.model.get()
+    if (auto && !current.url && (res.services || []).length === 1) {
+      openUpstream(panel, res.services[0].url, { push: true })
+      flash(panel, '检测到 1 个本地服务，已自动打开')
     }
   }
 
@@ -328,16 +424,16 @@ function apply(ctx) {
     notify('ping')
   }
 
-  /** Hand the current annotations to the composer as one structured block. */
   const sendAll = (panel, setDraft) => {
     const state = panel.model.get()
     if (!state.annotations.length) return false
     const writer = setDraft || (panel.draftWriter && panel.draftWriter.setDraft)
     if (!writer) {
-      panel.model.set({ notice: '还没找到输入框：先切到一个有输入框的会话，再点这里发送标注。' })
+      flash(panel, '还没找到输入框：先切到一个有输入框的会话，再点这里发送标注。')
       return false
     }
-    const block = payloadBlock(state.annotations, state.page || state.url, state.viewport || { w: 0, h: 0 })
+    // The page identity that matters is the upstream one, never the proxy path.
+    const block = payloadBlock(state.annotations, state.url || state.page, state.viewport || { w: 0, h: 0 })
     const current = String((panel.draftWriter && panel.draftWriter.draft) || '')
     const next = (current ? current.replace(/\s+$/, '') + '\n\n' : '') + block
     writer(next)
@@ -352,47 +448,7 @@ function apply(ctx) {
     return true
   }
 
-  const ensureRunning = async (panel) => {
-    const state = panel.model.get()
-    if (state.status === 'starting' || state.status === 'running') return
-    const root = state.root
-    if (!root) {
-      panel.model.set({ status: 'error', statusText: '拿不到工作区目录' })
-      return
-    }
-    panel.model.set({ status: 'starting', statusText: '启动：' + panel.model.get().command })
-    const started = await api('start', { sid: panel.sid, root: root })
-    if (started && started.ok) {
-      const base = started.base || panel.model.get().base
-      panel.model.set({
-        status: 'running',
-        statusText: '',
-        base: base,
-        command: started.command || panel.model.get().command,
-        log: started.log || [],
-        hostUrl: started.url || panel.model.get().hostUrl,
-        url: sameOriginUrl(base),
-        draftUrl: sameOriginUrl(base),
-      })
-    } else {
-      panel.model.set({ status: 'error', statusText: (started && started.error) || '启动失败', log: (started && started.log) || [] })
-    }
-  }
-
-  const refreshHost = async (panel) => {
-    const res = await api('state', { sid: panel.sid })
-    if (!res || !res.ok) return
-    const patch = {
-      status: res.running ? 'running' : res.starting ? 'starting' : panel.model.get().status === 'error' ? 'error' : 'idle',
-      log: res.log || [],
-      hostUrl: res.url || panel.model.get().hostUrl,
-    }
-    if (res.base) patch.base = res.base
-    if (res.command) patch.command = res.command
-    panel.model.set(patch)
-  }
-
-  // --------------------------------------------------------------- tab body
+    // --------------------------------------------------------------- tab body
 
   const AnnotateTab = (props) => {
     const panel = getPanel(props.sessionId)
@@ -402,23 +458,32 @@ function apply(ctx) {
     const draft = props.useInput ? props.useInput((s) => s.draft) : ''
     const sessionId = props.sessionId
     const inputActions = props.inputActions
-    // `useWorkspaces` is a selector hook (SnapshotSelectorHook), not a plain getter.
     const workspaceItems = props.useWorkspaces ? props.useWorkspaces((snapshot) => snapshot.items) : undefined
 
-    // Zero setup: resolve the session's workspace and bring the dev server up.
     React.useEffect(() => {
       const list = Array.isArray(workspaceItems) ? workspaceItems : []
-      const mine = list.find((w) => w && Array.isArray(w.sessionIds) && w.sessionIds.indexOf(sessionId) !== -1)
+      const mine = list.find((item) => item && Array.isArray(item.sessionIds) && item.sessionIds.indexOf(sessionId) !== -1)
       const root = (mine && mine.path) || (list[0] && list[0].path) || ''
       if (root && root !== panel.model.get().root) panel.model.set({ root: root })
-      if (root) void ensureRunning(panel)
     }, [sessionId, workspaceItems, panel])
 
+    // First look around: what is running right now?
     React.useEffect(() => {
-      if (!panel.model.get().logOpen) return undefined
-      const timer = setInterval(() => void refreshHost(panel), 2500)
-      return () => clearInterval(timer)
-    }, [panel, state.logOpen])
+      let cancelled = false
+      void (async () => {
+        const hostState = await api('state', { sid: sessionId })
+        if (cancelled || !hostState || !hostState.ok) return
+        panel.model.set({
+          proxyPrefix: hostState.proxyPrefix || panel.model.get().proxyPrefix,
+          command: hostState.command || null,
+          log: hostState.log || [],
+        })
+        if (!panel.model.get().url) await runDetect(panel, { auto: true })
+      })()
+      return () => {
+        cancelled = true
+      }
+    }, [panel, sessionId])
 
     React.useEffect(() => {
       panel.draftWriter = {
@@ -433,70 +498,187 @@ function apply(ctx) {
         const frame = frameRef
         if (!frame || event.source !== frame.contentWindow) return
         const data = event.data
-        if (!data || data.source !== CHANNEL_IN) return
-        if (data.type === 'ready' || data.type === 'changed') {
-          panel.model.set({
-            annotations: data.annotations || [],
-            viewport: data.viewport || panel.model.get().viewport,
-            page: data.path || panel.model.get().page,
-          })
-        } else if (data.type === 'mode') {
-          panel.model.set({ mode: data.mode })
-        } else if (data.type === 'send') {
-          // ⌘/Ctrl-click in the page: commit, then ship the whole batch.
-          sendAll(panel, inputActions && inputActions.setDraft)
+        if (!data) return
+        if (data.source === CHANNEL_IN) {
+          if (data.type === 'ready' || data.type === 'changed') {
+            const current = panel.model.get()
+            panel.model.set({
+              annotations: data.annotations || [],
+              viewport: data.viewport || current.viewport,
+              // The overlay reports the proxied path; the upstream URL is the
+              // one worth keeping, so only fill in when we have nothing.
+              page: current.url ? current.page : data.path || current.page,
+            })
+          } else if (data.type === 'mode') {
+            panel.model.set({ mode: data.mode })
+          } else if (data.type === 'send') {
+            sendAll(panel, inputActions && inputActions.setDraft)
+          }
+          return
+        }
+        if (data.source === PAGE_CHANNEL && data.type === 'navigated' && data.url) {
+          // SPA route change: follow it in the address bar and remember it.
+          const current = panel.model.get()
+          if (data.url === current.url) return
+          const history = current.history.slice(0, current.index + 1).concat([data.url])
+          panel.model.set({ url: data.url, input: data.url, history: history.slice(-40), index: Math.min(history.length - 1, 39) })
         }
       }
       window.addEventListener('message', onMessage)
       return () => window.removeEventListener('message', onMessage)
     }, [panel, inputActions, annotations])
 
-    const sendLogToChat = () => {
-      const lines = panel.model.get().log.slice(-60).join('\n')
-      if (!lines || !inputActions) return
-      const current = String(draft || '')
-      inputActions.setDraft((current ? current.replace(/\s+$/, '') + '\n\n' : '') + 'dev server 日志：\n```\n' + lines + '\n```\n请根据日志判断问题。')
+    const go = (delta) => {
+      const current = panel.model.get()
+      const index = current.index + delta
+      if (index < 0 || index >= current.history.length) return
+      const url = current.history[index]
+      panel.model.set({ index: index, url: url, input: url, src: proxyUrlFor(panel, url), mode: 'idle' })
     }
 
-    const cycleServer = async () => {
-      const now = panel.model.get()
-      if (now.status === 'running') {
-        await api('stop', { sid: panel.sid })
-        panel.model.set({ status: 'idle', statusText: '' })
-      } else {
-        await ensureRunning(panel)
+    const reload = () => {
+      const frame = frameRef
+      if (frame && frame.contentWindow) {
+        try {
+          frame.contentWindow.location.reload()
+          return
+        } catch (error) {
+          void error
+        }
+      }
+      panel.model.set({ src: panel.model.get().src })
+    }
+
+    const copy = (text) => {
+      try {
+        void navigator.clipboard.writeText(text)
+        flash(panel, '已复制：' + text)
+      } catch (error) {
+        void error
       }
     }
 
-    const commitUrl = () => {
-      const next = state.draftUrl && state.draftUrl.trim() ? state.draftUrl.trim() : sameOriginUrl(state.base)
-      panel.model.set({ url: next, draftUrl: next, cors: false })
+    const showList = () => {
+      panel.model.set({ view: 'list', mode: 'idle', notice: null })
+      notify('set-mode', { mode: 'idle' })
+      void runDetect(panel, { auto: false })
     }
+
     const toggleMode = () => {
       const next = state.mode === 'picking' ? 'idle' : 'picking'
       panel.model.set({ mode: next })
       notify('set-mode', { mode: next })
     }
 
+    const notice = state.notice
+      ? React.createElement(
+          'div',
+          { className: 'dsa-notice' },
+          state.notice,
+          React.createElement('button', { type: 'button', title: '知道了', onClick: () => panel.model.set({ notice: null }) }, '✕')
+        )
+      : null
+
+    if (state.view === 'list') {
+      const services = state.services
+      const commands =
+        state.hint && state.hint.commands && state.hint.commands.length
+          ? state.hint.commands
+          : [{ script: 'dev', command: 'npm run dev' }]
+      return React.createElement(
+        'div',
+        { className: 'dsa-col' },
+        notice,
+        React.createElement(
+          'div',
+          { className: 'dsa-listwrap' },
+          React.createElement(
+            'div',
+            { className: 'dsa-sechead' },
+            state.detect === 'busy'
+              ? '正在检测本地服务…'
+              : services.length
+                ? '检测到 ' + services.length + ' 个本地服务'
+                : '没有检测到本地服务',
+            React.createElement(
+              'button',
+              { className: 'dsa-ico', type: 'button', title: '重新检测', disabled: state.detect === 'busy', onClick: () => void runDetect(panel, { auto: false }) },
+              React.createElement(Icon, { name: 'refresh' })
+            )
+          ),
+          services.map((service) =>
+            React.createElement(
+              'button',
+              { className: 'dsa-svc', type: 'button', key: service.port, onClick: () => openUpstream(panel, service.url) },
+              React.createElement('span', { className: 'dot' }),
+              React.createElement(
+                'span',
+                { className: 'copy' },
+                React.createElement('b', null, service.title || service.url),
+                React.createElement('span', null, service.url)
+              ),
+              React.createElement('span', { className: 'go' }, '打开 →')
+            )
+          ),
+          !services.length && state.detect !== 'busy'
+            ? React.createElement(
+                'div',
+                { className: 'dsa-hintbox' },
+                React.createElement('p', null, '没有正在运行的本地 web（已扫 ' + (state.scanned || 0) + ' 个端口）。先把它跑起来，再点刷新：'),
+                commands.map((entry) =>
+                  React.createElement(
+                    'div',
+                    { className: 'dsa-cmd', key: entry.command },
+                    React.createElement('code', null, entry.command),
+                    React.createElement('button', { type: 'button', onClick: () => copy(entry.command) }, '复制')
+                  )
+                ),
+                React.createElement('p', { style: { marginTop: '10px' } }, '跑起来后这里会自动出现，点一下就能标注。')
+              )
+            : null
+        ),
+        React.createElement(
+          'div',
+          { className: 'dsa-openrow' },
+          React.createElement('input', {
+            value: state.input,
+            spellCheck: false,
+            placeholder: '5173 或 localhost:3000',
+            onChange: (event) => panel.model.set({ input: event.target.value }),
+            onKeyDown: (event) => {
+              if (event.key === 'Enter') openUpstream(panel, event.target.value)
+            },
+          }),
+          React.createElement('button', { type: 'button', onClick: () => openUpstream(panel, state.input) }, '打开')
+        )
+      )
+    }
+
     return React.createElement(
       'div',
       { className: 'dsa-col' },
-      state.notice ? React.createElement('div', { className: 'dsa-notice' }, state.notice) : null,
+      notice,
       React.createElement(
         'div',
         { className: 'dsa-bar' },
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '后退', disabled: state.index <= 0, onClick: () => go(-1) }, React.createElement(Icon, { name: 'back' })),
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '前进', disabled: state.index >= state.history.length - 1, onClick: () => go(1) }, React.createElement(Icon, { name: 'forward' })),
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '重新载入', onClick: reload }, React.createElement(Icon, { name: 'refresh' })),
         React.createElement('input', {
           className: 'dsa-url',
-          value: state.draftUrl,
+          value: state.input,
           spellCheck: false,
-          placeholder: sameOriginUrl(state.base),
-          title: '预览地址：必须是同源地址（见 README 的同源桥）',
-          onChange: (event) => panel.model.set({ draftUrl: event.target.value }),
+          placeholder: '地址',
+          onChange: (event) => panel.model.set({ input: event.target.value }),
           onKeyDown: (event) => {
-            if (event.key === 'Enter') commitUrl()
+            if (event.key === 'Enter') openUpstream(panel, event.target.value)
           },
         }),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '打开地址', onClick: commitUrl }, React.createElement(Icon, { name: 'external' })),
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '回到本地服务列表', onClick: showList }, React.createElement(Icon, { name: 'list' }))
+      ),
+      React.createElement(
+        'div',
+        { className: 'dsa-bar', style: { paddingTop: 0, borderTop: 0 } },
         React.createElement(
           'button',
           {
@@ -508,35 +690,7 @@ function apply(ctx) {
           },
           React.createElement(Icon, { name: 'marker' })
         ),
-        React.createElement(
-          'button',
-          {
-            className: 'dsa-ico',
-            type: 'button',
-            title: '重新载入预览',
-            onClick: () => {
-              notify('set-mode', { mode: 'idle' })
-              panel.model.set({ url: state.url + (state.url.indexOf('?') === -1 ? '?' : '&') + 'r=' + Date.now(), mode: 'idle' })
-            },
-          },
-          React.createElement(Icon, { name: 'refresh' })
-        ),
-        React.createElement(
-          'span',
-          {
-            className: 'dsa-status',
-            'data-state': state.status,
-            title:
-              state.statusText ||
-              (state.status === 'running'
-                ? 'dev server 运行中 · ' + state.hostUrl
-                : '点一下启动：' + state.command),
-          },
-          React.createElement('i'),
-          state.status === 'running' ? '运行中' : state.status === 'starting' ? '启动中' : state.status === 'error' ? '出错' : '未运行'
-        ),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: state.status === 'running' ? '停止 dev server' : '启动 dev server', onClick: () => void cycleServer() }, React.createElement(Icon, { name: state.status === 'running' ? 'stop' : 'play' })),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', 'data-on': state.logOpen ? 'true' : 'false', title: '日志', onClick: () => { panel.model.set({ logOpen: !state.logOpen }); void refreshHost(panel) } }, React.createElement(Icon, { name: 'log' })),
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '在系统浏览器打开', onClick: () => window.open(state.url, '_blank', 'noopener') }, React.createElement(Icon, { name: 'external' })),
         React.createElement('span', { className: 'dsa-count' }, annotations.length ? String(annotations.length) : ''),
         React.createElement(
           'button',
@@ -550,48 +704,41 @@ function apply(ctx) {
           '发给 AI'
         )
       ),
-      state.logOpen
-        ? React.createElement(
-            'div',
-            { className: 'dsa-log' },
-            React.createElement(
-              'div',
-              { className: 'dsa-loghead' },
-              React.createElement('span', { className: 'dsa-mono' }, 'dev server 日志 · ' + panel.model.get().log.length + ' 行'),
-              React.createElement('button', { className: 'dsa-btn', type: 'button', onClick: sendLogToChat }, '日志→对话')
-            ),
-            React.createElement('pre', { className: 'dsa-mono' }, panel.model.get().log.slice(-40).join('\n') || '（暂无输出）')
-          )
-        : null,
       React.createElement(
         'div',
         { className: 'dsa-stage' },
         React.createElement('iframe', {
           className: 'dsa-frame',
-          key: state.url,
-          src: state.url,
+          key: state.src,
+          src: state.src,
           title: '预览',
-          sandbox: 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads',
+          sandbox: 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals',
           ref: (el) => {
             frameRef = el
           },
-          onLoad: (event) => injectOverlay(event.currentTarget, panel),
+          onLoad: (event) => {
+            injectOverlay(event.currentTarget, panel)
+            try {
+              const reported = event.currentTarget.contentWindow.__dshAnnoState
+                ? event.currentTarget.contentWindow.__dshAnnoState()
+                : null
+              if (reported && reported.url && reported.url !== panel.model.get().url) {
+                panel.model.set({ url: reported.url, input: reported.url, page: new URL(reported.url).pathname })
+              }
+            } catch (error) {
+              void error
+            }
+          },
         }),
         state.cors
           ? React.createElement(
               'div',
               { className: 'dsa-empty' },
-              React.createElement('div', { className: 'dsa-target' }, React.createElement('i'), React.createElement('i'), React.createElement('i'), React.createElement('i')),
-              React.createElement('h4', null, '这个地址跨源，标注层注入不进去'),
-              React.createElement(
-                'p',
-                null,
-                '同源策略下跨端口 iframe 的 DOM 读不到。用同源桥预览：profile 里把桥的 target/prefix 指向这个项目，地址填 ',
-                React.createElement('code', null, sameOriginUrl(state.base))
-              )
+              React.createElement('h4', null, '这个页面读不到 DOM，标注层注入不进去'),
+              React.createElement('p', null, '跨源页面无法标注。回到列表选一个本地服务（本地服务会自动经同源代理打开）。')
             )
           : null,
-        React.createElement('div', { className: 'dsa-stagefoot' }, React.createElement('i'), '同源预览 · ' + state.url.replace(/\?.*$/, ''))
+        React.createElement('div', { className: 'dsa-stagefoot' }, React.createElement('i'), React.createElement('span', null, state.url))
       ),
       React.createElement(
         'div',
@@ -599,8 +746,8 @@ function apply(ctx) {
         annotations.length === 0
           ? React.createElement(
               'div',
-              { className: 'dsa-empty', style: { position: 'static', background: 'transparent', padding: '18px 16px' } },
-              React.createElement('p', null, '还没有标注。点工具栏的标记按钮，在预览里点击元素写批注；⌘/Ctrl+点击可直接发送。')
+              { className: 'dsa-empty', style: { position: 'static', background: 'transparent', padding: '16px' } },
+              React.createElement('p', null, '还没有标注。点上面的标记按钮，在页面里点击元素写批注；⌘/Ctrl+点击可直接发送。')
             )
           : annotations.map((ann, index) =>
               React.createElement(
@@ -618,7 +765,7 @@ function apply(ctx) {
                     React.createElement('span', null, ann.rect.w + '×' + ann.rect.h)
                   ),
                   React.createElement('div', { className: 'dsa-sel' }, ann.selector),
-                  React.createElement('div', { className: 'dsa-comment' }, ann.comment),
+                  React.createElement('div', { className: 'dsa-comment' }, ann.comment)
                 ),
                 React.createElement(
                   'div',
@@ -632,7 +779,7 @@ function apply(ctx) {
     )
   }
 
-  // ------------------------------------------------------- smaller entries
+    // ------------------------------------------------------- smaller entries
 
   const HeaderButton = (props) => {
     const panel = getPanel(props.sessionId)
@@ -644,7 +791,7 @@ function apply(ctx) {
         className: 'dsa-open',
         type: 'button',
         'data-count': count > 0 ? 'true' : 'false',
-        title: '界面标注（⌘⇧B / ⌘⇧A）：在右侧栏预览并圈选界面元素',
+        title: '界面标注（⌘⇧B）：列出本地在跑的服务，点开就能标注',
         onClick: openAnnotate,
       },
       React.createElement(Icon, { name: 'marker' }),
@@ -714,7 +861,7 @@ function apply(ctx) {
           {
             order: 40,
             title: () => '界面标注',
-            description: () => '在右侧栏预览本地页面，圈选元素写批注，一次发给 DeepSeek',
+            description: () => '检测本地在跑的 web，点开即可圈选元素写批注，一次发给 DeepSeek',
             icon: (iconProps) => React.createElement(Icon, Object.assign({ name: 'marker' }, iconProps)),
           },
         ],
@@ -746,6 +893,9 @@ function apply(ctx) {
   window.addEventListener('keydown', onKeyDown)
   ctx.effect(() => () => window.removeEventListener('keydown', onKeyDown))
 }
+
+
+
 
     exports.apply = apply;
     if (typeof inject !== "undefined") exports.inject = inject;

@@ -12,75 +12,81 @@ Two Cordis plugins:
 
 ## Quickstart
 
-### A. Just try it (no project of your own needed)
+### A. Just try it (nothing of yours involved)
 
 ```bash
 git clone <this-repo> && cd dsh-annotate
 node scripts/dev.mjs
 ```
 
-The script creates its own DSH profile, boots the harness and prints a URL like
-`http://127.0.0.1:3099/?token=…`. Open it → open a conversation → press
-<kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd> → the bundled fixture app starts by itself and
-appears in the right sidebar. Nothing of yours is touched.
+Starts the bundled fixture plus a dedicated DSH profile with **no
+configuration**, and prints a URL like `http://127.0.0.1:3099/?token=…`. Open it
+→ open a conversation → <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd> → the fixture is
+listed → click it → annotate.
 
 ### B. Use it on your own project
 
-1. **Install both packages into your profile**
+1. **Install one package** into your profile, then restart `dsh web`:
 
    ```bash
-   dsh plugin --profile web add link:<repo>/packages/dsh-app-bridge
    dsh plugin --profile web add link:<repo>/packages/dsh-annotate
+   # plus one line in ~/.dsh/profiles/web/cordis.patch.yml:
+   #   - insert:
+   #       - name: dsh-annotate
+   dsh web
    ```
 
-   `dsh plugin` is a thin `pnpm` wrapper for the profile directory, so it needs
-   `pnpm` on PATH (`npm i -g pnpm`) — or do it by hand:
-   `cd ~/.dsh/profiles/web && npx --yes pnpm@10 add link:<repo>/packages/dsh-annotate`
+   (`dsh plugin` is a thin `pnpm` wrapper for the profile directory, so it needs
+   `pnpm` on PATH — `npm i -g pnpm` — or run
+   `cd ~/.dsh/profiles/web && npx --yes pnpm@10 add link:<repo>/packages/dsh-annotate`.)
 
-2. **Mount them** — append to `~/.dsh/profiles/web/cordis.patch.yml`:
+2. **Start your dev server the way you always do** (`npm run dev`, `pnpm dev`,
+   whatever it is). You do **not** tell the plugin about it, and it does **not**
+   need a base prefix or a special script.
 
-   ```yaml
-   - insert:
-       - name: dsh-app-bridge
-         config: { target: "http://127.0.0.1:5180", prefix: "/app" }
-       - name: dsh-annotate
-         config: { command: "npm run dev:panel", port: 5180, base: "/app" }
-   ```
-
-   `command` / `port` / `base` must match the bridge's `target` / `prefix`.
-
-3. **Make your dev server serve under that prefix**
-
-   ```json
-   { "scripts": { "dev:panel": "IDD_BASE=/app/ vite --host 127.0.0.1 --port 5180 --strictPort" } }
-   ```
-
-   (Vite's `--base`; any dev server that can mount under a path works.) Browser
-   facing API paths must follow the base too — with Vite, prefix them with
-   `import.meta.env.BASE_URL`. Don't use `prefix: "/"`: that fights the harness
-   for its own root.
-
-4. **Restart the harness** (`dsh web`) — host halves and the bridge load at boot.
-
-5. **Annotate**: open a conversation with content, press
-   <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd> (`⌘⇧A` works too, as do the conversation
-   header's **标注** button and the right sidebar's `+` → guide entry). The tab
-   starts your dev server itself, shows `● running`, then loads the preview. Pick
-   elements, write notes, optionally tweak styles live, then **发给 AI** — or
+3. **Open the tab** (`⌘⇧B`, or the conversation header's **标注** button, or the
+   right sidebar's `+` → guide entry). It lists the local web servers that are
+   actually running, with their page titles. Click one → the page loads → pick
+   elements, write notes (optionally tweak styles live) → **发给 AI**, or
    <kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click an element to write and send in one step.
+
+4. Nothing running? The tab says so and shows the command to run (read from the
+   session workspace's `package.json`), with a copy button. Refresh and it
+   appears.
+
+An address bar is always there if you would rather type one: `5173`,
+`localhost:3000/x` and full URLs all work.
+
+### Optional overrides
+
+Everything below is unnecessary for the normal path:
+
+```yaml
+- insert:
+    - name: dsh-annotate
+      config:
+        command: "npm run dev:panel"   # let the plugin start it for you
+        port: 5180
+        base: "/app"
+        proxyPrefix: "/__dsh_anno"     # where proxied pages are mounted
+        detect: { extraPorts: [4321], probeTimeoutMs: 900 }
+```
+
+`command` turns on the toolbar's start/stop controls; without it the plugin
+never touches your processes. `packages/dsh-app-bridge` remains for people who
+prefer a fixed mount of a base-prefixed dev server (higher fidelity, more
+setup).
 
 ### When something is off
 
 | Symptom | Cause / fix |
 | --- | --- |
 | `⌘⇧B` does nothing | The conversation has no content yet, so no header/sidebar surface exists — use a conversation that already has messages. |
-| Status stays `启动中` then `出错` | The project has no `dev:panel` script (or `command` is wrong). Open the toolbar's `▤` log drawer; the failure text is there. |
-| Preview blank, assets 404 | The dev server was started without a base prefix, so its asset URLs escaped to the harness root. Start it with `--base=/app/` and keep `base`/`prefix` identical. |
-| A “跨源” notice covers the preview | The address is not the same-origin one: use `<harness origin><base>`, not the dev server's own host:port. |
-| `502` from the bridge | The bridge is mounted but nothing listens upstream: the dev server died, or `target` points at the wrong port. |
+| The list is empty but a server is running | It may not answer `GET /` with HTML, or it is on an unusual port: add `detect.extraPorts`, or type the address by hand. |
+| Preview is blank, assets 404 | The app builds absolute URLs the shim cannot see (rare) — set `proxyPrefix` aside and try `dsh-app-bridge` with a base-prefixed dev server instead. |
 | No component chain in an annotation | Component names come from a React dev build's fiber; non-React pages omit that line. |
 
-## Why the bridge is not optional
+## Why a proxy is involved (you never see it)
 
 Annotating elements inside an `<iframe>` means reading that document's DOM, and
 the browser only allows it Same-Origin. A dev server on `localhost:5173` is a
@@ -89,17 +95,18 @@ clever — can reach into it. Existing DSH preview plugins agree: they proxy
 *external* sites and deliberately skip loopback, which is exactly the case that
 matters when you are building the app yourself.
 
-`dsh-app-bridge` closes that gap by serving the dev server **on the harness
-origin**:
+So the plugin serves the picked page **on the harness origin**, automatically:
 
 ```
-dev server (base /app/)            harness origin
-http://127.0.0.1:5180/app/   <--   http://127.0.0.1:3080/app/     ← previewed here
-                                   (same origin ⇒ DOM is readable ⇒ annotatable)
+detected            http://127.0.0.1:5173/settings
+loaded as           <harness>/__dsh_anno/<encoded target>/settings
+mapped back to      http://127.0.0.1:5173/settings
 ```
 
-Everything the app needs — assets, HMR socket, its own `/app/api/*` calls —
-stays under `/app/`, so nothing collides with the harness' own `/api/*`.
+The proxy injects a `<base>` and a small shim (so the app's own asset, API and
+WebSocket URLs stay inside it), forwards upgrades through one relay path, and
+scopes the app's cookies per target so nothing leaks into the harness. Only
+loopback targets are ever probed or opened by discovery.
 
 ## Install (private, from disk)
 

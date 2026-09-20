@@ -1,5 +1,13 @@
 # Plan: sidebar annotation for whatever local web is running
 
+> **Status.** Work 1–3 are implemented and verified: discovery (`detect`), the
+> dynamic loopback proxy (with `<base>` + shim, per-target cookies, WS relay) and
+> the two-face pane. Install is one package plus a restart, with no
+> configuration. `tests/proxy.mjs` covers the proxy contract and
+> `tests/gui-smoke.mjs` the product flow. What remains is polish: multiple open
+> pages, richer suggestions (recent URLs, per-workspace scripts), and the
+> boundaries in section 4.
+
 > Replaces the earlier "annotate any web" draft. Scope is deliberately small:
 > **local web only, zero configuration, discovery instead of setup.**
 
