@@ -14,6 +14,11 @@ one structured block.
 The panel lives in a normal sidebar tab, so it behaves like part of the harness
 rather than a bolted-on tool.
 
+![The annotation panel next to a previewed app: the toolbar, the annotation list and a numbered marker on the page](docs/panel-overview.png)
+
+*The suite's own fixture: the toolbar, the in-flow annotation list, and a marker
+attached to a picked element. Regenerate with `npm test`.*
+
 ```
   ⌘⇧B  →  pick a running local service  →  click an element  →  write a note
         →  Send annotations (or Add to composer)  →  the agent gets selectors,

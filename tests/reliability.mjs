@@ -64,6 +64,11 @@ try {
   const context = await browser.newContext({viewport:{width:520,height:840},locale:'zh-CN'})
   const page = await context.newPage(); const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.log('BROWSER ERROR',e.message)});page.on('console',m=>{if(m.type()==='error')console.log('CONSOLE',m.text())});page.on('requestfailed',r=>console.log('REQUEST FAILED',r.url(),r.failure()))
   await page.goto(origin)
+  mkdirSync(resolve(repo,'tests/shots'),{recursive:true})
+  // Documentation shot: the discovery list, before anything is opened. The
+  // suite doubles as the screenshot generator; see DEVELOPING.md.
+  await page.locator('.dsa-svc').first().waitFor({timeout:15000}).catch(()=>{})
+  await page.screenshot({path:resolve(repo,'tests/shots/review-list.png')})
   const open = async()=>{
     if (await page.locator('.dsa-openrow input').count()) { await page.locator('.dsa-openrow input').fill(upstream); await page.locator('.dsa-openrow input').press('Enter') }
     else { await page.locator('.dsa-url').fill(upstream); await page.locator('.dsa-url').press('Enter') }
@@ -169,13 +174,16 @@ try {
   await frame.waitForFunction(()=>!document.querySelector('.dsa-card'))
   assert.equal(await page.locator('button[title^="标记模式"]').getAttribute('aria-pressed'),'false');pass('Esc leaves marking mode and closes the editor')
   // The panel and the injected overlay switch language together, and the choice
-  // is reversible.
+  // is reversible. Drop the dark override first so the documentation shot below
+  // shows the light surfaces the panel defaults to.
+  await page.evaluate(()=>{document.body.style.cssText=''})
   assert.equal(await page.locator('.dsa-lang').textContent(),'中');pass('language defaults to the browser locale (zh)')
   await page.locator('.dsa-lang').click()
   await page.waitForFunction(()=>document.querySelector('.dsa-bar button[title="Back"]'))
   assert.equal(await page.locator('.dsa-lang').textContent(),'EN')
   assert.equal(await page.locator('.dsa-url').getAttribute('placeholder'),'Address')
   await frame.waitForFunction(()=>{const pin=document.querySelector('.dsa-pin');return pin&&/^Edit annotation/.test(pin.getAttribute('aria-label')||'')})
+  await page.screenshot({path:resolve(repo,'tests/shots/review-en.png')})
   pass('language switch re-renders the panel and the injected overlay')
   await page.locator('.dsa-lang').click()
   await page.waitForFunction(()=>document.querySelector('.dsa-bar button[title="后退"]'))
