@@ -58,6 +58,18 @@ called. Native harness loading is a manual step.
 - Screenshots land in the ignored `tests/shots/`, and CI uploads them when a run
   fails.
 
+The run also produces the panel screenshots used for documentation
+(`review-list.png`, `review-en.png`, plus light/dark/narrow variants). When the
+panel's chrome changes, refresh the README image from a green run:
+
+```sh
+npm test
+cp tests/shots/review-en.png docs/panel-overview.png
+```
+
+Check the PNG for anything from your own machine before committing it: the list
+shot in particular lists whatever local dev servers you happen to be running.
+
 ## Live harness loop
 
 ```sh
