@@ -471,13 +471,13 @@
     card = null
     state.drafting = null
     state.anchor = null
-    // Writing is a detour, not a destination: coming back from a card must
-    // leave picking armed, so the next element can be annotated right away.
-    var resume = state.mode === 'writing'
-    state.mode = 'picking'
+    // Writing is a detour, not a destination: coming back from a card leaves
+    // picking armed so the next element is one click away — but a caller that
+    // already set another mode (setMode('idle') on Esc) must win.
+    if (state.mode === 'writing') state.mode = 'picking'
     state.selected = null
     render()
-    if (resume) post('mode', { mode: state.mode, count: state.annotations.length })
+    post('mode', { mode: state.mode, count: state.annotations.length })
   }
 
   function openCard(draft, el) {
@@ -508,8 +508,7 @@
         commit()
       } else if (event.key === 'Escape') {
         event.preventDefault()
-        closeCard()
-        // Esc means "leave annotation mode", not just "close this card".
+        // Esc means "leave annotation mode"; setMode closes the card for us.
         setMode('idle')
       }
     })
@@ -568,6 +567,7 @@
     state.selected = el
     state.hover = null
     state.mode = 'writing'
+    post('mode', { mode: state.mode, count: state.annotations.length })
     // Codex parity: ⌘/Ctrl-click means "write it and ship it".
     state.sendOnCommit = Boolean(event.metaKey || event.ctrlKey)
     render()
@@ -612,6 +612,9 @@
     var data = event.data
     if (!data || data.source !== HOST) return
     if (data.type === 'set-mode') setMode(data.mode)
+    // The panel cannot always know whether a card is open; let the overlay —
+    // which owns the mode — decide what "toggle" means right now.
+    if (data.type === 'toggle-mode') setMode(state.mode === 'idle' ? 'picking' : 'idle')
     else if (data.type === 'focus') {
       var ann = state.annotations.filter(function (a) {
         return a.id === data.id
