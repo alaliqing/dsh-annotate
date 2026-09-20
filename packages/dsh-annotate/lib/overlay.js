@@ -22,7 +22,7 @@ function dsaI18n(preferred) {
       // ---- annotation block sent to the model ------------------------------
       'payload.head': '🎯 UI annotations · {page} · viewport {w}×{h} ({count})',
       'payload.selector': '   selector: ',
-      'payload.selectorMatches': ' ({count} matches)',
+      'payload.selectorMatches': ' (matches: {count})',
       'payload.semantics': '   semantics: ',
       'payload.component': '   component: ',
       'payload.componentChain': '   component chain: ',
