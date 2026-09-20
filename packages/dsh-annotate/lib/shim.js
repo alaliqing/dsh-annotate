@@ -23,9 +23,10 @@
   var withSlash = cfg.prefix.slice(-1) === '/' ? cfg.prefix : cfg.prefix + '/'
 
   function proxied(url) {
-    // root-relative stays relative to <base>, which is already the proxy
-    if (url.charAt(0) === '/') return url
     if (url.indexOf(PROXIED) === 0) return url
+    // Root-absolute paths have to be prefixed here: a base element cannot do it
+    // (URL parsing of '/x' replaces the whole path, base included).
+    if (url.charAt(0) === '/' && url.charAt(1) !== '/') return withSlash + url.slice(1)
     if (url.indexOf(withSlash) === 0) return url
     if (url.indexOf(cfg.upstream) === 0) return location.origin + withSlash + url.slice(cfg.upstream.replace(/\/$/, '').length + 1)
     if (url.indexOf(location.origin) === 0) return location.origin + withSlash + url.slice(location.origin.length + 1)
@@ -153,15 +154,22 @@
   }
 
   try {
+    // A router pushing '/settings' would otherwise move the document straight
+    // out of the proxy (the harness root has no such page).
+    var rewriteStateUrl = function (url) {
+      if (typeof url !== 'string' || url.charAt(0) !== '/' || url.indexOf('//') === 0) return url
+      if (url.indexOf(withSlash) === 0) return url
+      return withSlash + url.slice(1)
+    }
     var pushState = history.pushState
-    history.pushState = function () {
-      var result = pushState.apply(this, arguments)
+    history.pushState = function (state, title, url) {
+      var result = pushState.call(this, state, title, rewriteStateUrl(url))
       report()
       return result
     }
     var replaceState = history.replaceState
-    history.replaceState = function () {
-      var result = replaceState.apply(this, arguments)
+    history.replaceState = function (state, title, url) {
+      var result = replaceState.call(this, state, title, rewriteStateUrl(url))
       report()
       return result
     }
