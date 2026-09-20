@@ -526,14 +526,64 @@ function rewriteLocation(value, target, prefix) {
   return value
 }
 
+/**
+ * Root-absolute URLs (`/src/main.tsx`, `/@vite/client`) are the reason a
+ * `<base>` is not enough: URL parsing of an absolute path replaces the whole
+ * path, so the base's own path never applies. Dev servers emit these
+ * everywhere, so the HTML's static URLs are rewritten here, and an import map
+ * (below) covers the module graph that no rewriting can reach.
+ */
+function rewriteRootUrls(html, prefix) {
+  const ATTR = /(\s(?:src|href|action|formaction|poster|data-src)\s*=\s*)(["'])(\/[^"'\s>]*)\2/gi
+  return html.replace(ATTR, (match, lead, quote, value) => {
+    if (value.startsWith('//') || value.startsWith(prefix)) return match
+    return `${lead}${quote}${prefix}${value.slice(1)}${quote}`
+  })
+}
+
+/** Prefix keys for every top-level path the document uses, so `import` and
+ *  dynamic `import()` resolve inside the proxy too. */
+function importMapFor(html, prefix) {
+  // Dev servers reference these from inside modules, where no HTML rewriting
+  // can reach them.
+  const imports = {
+    '/node_modules/': `${prefix}node_modules/`,
+    '/@fs/': `${prefix}@fs/`,
+    '/@vite/': `${prefix}@vite/`,
+    '/@react-refresh': `${prefix}@react-refresh`,
+  }
+  const seen = /(?:src|href)\s*=\s*["'](\/[^"'\s>]*)["']/gi
+  let match
+  while ((match = seen.exec(html))) {
+    const path = match[1]
+    if (path.startsWith('//')) continue
+    const segment = path.slice(1).split('/')[0]
+    if (!segment) continue
+    if (path.slice(1).includes('/')) imports[`/${segment}/`] = `${prefix}${segment}/`
+    else imports[`/${segment}`] = `${prefix}${segment}`
+  }
+  const key = 'imports'
+  const payload = { [key]: imports }
+  return `<script type="importmap">${JSON.stringify(payload)}</script>`
+}
+
 function injectIntoHtml(html, config) {
+  const prefix = config.prefix
+  // Read the original document first: after rewriting, every URL is already
+  // prefixed and the import map would end up mapping the prefix onto itself.
+  const importMap = importMapFor(html, prefix)
+  const rewritten = rewriteRootUrls(html, prefix)
+  // The import map has to be in place before the first module script runs.
   const head =
-    `<base href="${config.prefix}">` +
     `<script>window.__DSH_ANNO__=${JSON.stringify(config)};</script>` +
+    importMap +
     `<script>${SHIM_SRC}</script>`
-  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (match) => match + head)
-  if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (match) => match + head)
-  return head + html
+  const withHead = /<head[^>]*>/i.test(rewritten)
+    ? rewritten.replace(/<head[^>]*>/i, (match) => match + head)
+    : /<html[^>]*>/i.test(rewritten)
+      ? rewritten.replace(/<html[^>]*>/i, (match) => match + head)
+      : head + rewritten
+  return withHead
 }
 
 function proxyHttp(req, res, proxyPrefix) {

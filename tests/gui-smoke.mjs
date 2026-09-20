@@ -15,6 +15,7 @@ if (!harness) {
   process.exit(2)
 }
 const wantPort = Number(process.argv[3] ?? 5199)
+const target = process.argv[4] ?? 'textarea, #question'
 const SHORT = { timeout: 5000 }
 
 const browser = await chromium.launch({ channel: 'chromium' })
@@ -39,20 +40,24 @@ for (let i = 0; i < 20 && !(await page.locator('.dsa-svc').count()); i++) await 
 const rows = await page.locator('.dsa-svc').allInnerTexts()
 console.log('discovered:', JSON.stringify(rows.map((row) => row.replace(/\s+/g, ' '))))
 
-// 2. one click opens it through the proxy
+// 2. it opens: a lone discovered service opens itself, otherwise click it
 const row = page.locator('.dsa-svc', { hasText: `:${wantPort}` }).first()
-if (!(await row.count())) {
-  console.log(`FAIL  no discovered service on :${wantPort}`)
+if (await row.count()) {
+  console.log('list has the target — clicking it')
+  await row.click()
+} else if (await page.locator('iframe.dsa-frame').count()) {
+  console.log('single service: the tab opened it by itself')
+} else {
+  console.log(`FAIL  neither listed nor opened on :${wantPort}`)
   await browser.close()
   process.exit(1)
 }
-await row.click()
 await page.waitForTimeout(2500)
 const frame = page.frameLocator('iframe.dsa-frame')
 let ready = 0
 for (let i = 0; i < 20 && !ready; i++) {
   await page.waitForTimeout(700)
-  ready = await frame.locator('#question').count()
+  ready = await frame.locator(target).count()
 }
 console.log('address bar:', await page.locator('.dsa-bar .dsa-url').first().inputValue())
 console.log('footer:', (await page.locator('.dsa-stagefoot').innerText().catch(() => '')).replace(/\s+/g, ' '))
@@ -62,7 +67,7 @@ console.log('preview ready:', ready)
 if (ready) {
   await page.locator('.dsa-ico[title^="标记模式"]').click(SHORT)
   await page.waitForTimeout(400)
-  await frame.locator('#question').click({ force: true, timeout: 5000 })
+  await frame.locator(target).first().click({ force: true, timeout: 5000 })
   await page.waitForTimeout(500)
   console.log('card open:', await frame.locator('.dsa-card').count())
   await frame.locator('.dsa-card textarea').first().click({ force: true, timeout: 5000 }).catch(() => {})

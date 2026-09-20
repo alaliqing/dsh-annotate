@@ -26,19 +26,25 @@ listed → click it → annotate.
 
 ### B. Use it on your own project
 
-1. **Install one package** into your profile, then restart `dsh web`:
+1. **Install one package** into your profile.
+
+   `dsh plugin` shells out to `pnpm`, so if `pnpm` is not on your PATH either
+   install it once (`npm i -g pnpm`) or skip it and run pnpm inside the profile:
 
    ```bash
-   dsh plugin --profile web add link:<repo>/packages/dsh-annotate
-   # plus one line in ~/.dsh/profiles/web/cordis.patch.yml:
-   #   - insert:
-   #       - name: dsh-annotate
-   dsh web
+   cd ~/.dsh/profiles/web
+   npx --yes pnpm@10 add link:<repo>/packages/dsh-annotate
    ```
 
-   (`dsh plugin` is a thin `pnpm` wrapper for the profile directory, so it needs
-   `pnpm` on PATH — `npm i -g pnpm` — or run
-   `cd ~/.dsh/profiles/web && npx --yes pnpm@10 add link:<repo>/packages/dsh-annotate`.)
+   Then append this to `~/.dsh/profiles/web/cordis.patch.yml`:
+
+   ```yaml
+   - insert:
+       - name: dsh-annotate
+   ```
+
+   and restart the harness (`dsh web`). The mount is read at boot, so an
+   already-running harness keeps the old state until it restarts.
 
 2. **Start your dev server the way you always do** (`npm run dev`, `pnpm dev`,
    whatever it is). You do **not** tell the plugin about it, and it does **not**
