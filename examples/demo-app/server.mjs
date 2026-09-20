@@ -10,6 +10,7 @@
  *   node server.mjs --port 5180 --base /app/
  */
 import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -91,6 +92,40 @@ const server = createServer(async (req, res) => {
     json(res, 404, { error: 'not found', path: relative })
   }
   return undefined
+})
+
+// A WebSocket echo endpoint: dev servers live on their HMR socket, so the proxy
+// has to carry an upgrade for real. Dependency-free handshake on purpose.
+server.on('upgrade', (req, socket) => {
+  const key = req.headers['sec-websocket-key']
+  if (!key || !String(req.url).startsWith(`${base === '/' ? '/' : base}ws`)) {
+    socket.destroy()
+    return
+  }
+  const accept = createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64')
+  socket.write(
+    'HTTP/1.1 101 Switching Protocols\r\n' +
+      'Upgrade: websocket\r\n' +
+      'Connection: Upgrade\r\n' +
+      `Sec-WebSocket-Accept: ${accept}\r\n\r\n`
+  )
+  // Minimal text-frame echo: one frame in, one frame out.
+  socket.on('data', (buffer) => {
+    const length = buffer[1] & 0x7f
+    const masked = (buffer[1] & 0x80) !== 0
+    let offset = 2
+    let payload = buffer.slice(offset, offset + length)
+    if (masked) {
+      const mask = buffer.slice(offset, offset + 4)
+      offset += 4
+      payload = buffer.slice(offset, offset + length)
+      for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i % 4]
+    }
+    const body = Buffer.from(`echo:${payload.toString('utf8')}`, 'utf8')
+    const frame = Buffer.concat([Buffer.from([0x81, body.length]), body])
+    socket.write(frame)
+  })
+  socket.on('error', () => socket.destroy())
 })
 
 server.listen(port, '127.0.0.1', () => {

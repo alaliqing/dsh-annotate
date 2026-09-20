@@ -2,6 +2,7 @@
  * Build the two faces DSH loads.
  *
  *   lib/index.js  — host half: ESM, copied verbatim from src/host.js
+   lib/shim.js   — the shim injected into proxied pages (read by the host half)
  *   lib/client.js — client half: a browser module bundle
  *
  * The web client's module loader calls a registered factory with a `require`
@@ -21,7 +22,10 @@ const read = (...parts) => readFileSync(join(root, ...parts), 'utf8')
 mkdirSync(join(root, 'lib', 'types', 'client'), { recursive: true })
 
 // ---- host half -------------------------------------------------------------
+// The host reads lib/shim.js at runtime, so it ships as its own file (keeps it
+// readable and patchable without a rebuild).
 writeFileSync(join(root, 'lib', 'index.js'), read('src', 'host.js'))
+writeFileSync(join(root, 'lib', 'shim.js'), read('src', 'shim.js'))
 
 // ---- client half -----------------------------------------------------------
 const clientSource = read('src', 'client.js')
@@ -57,4 +61,4 @@ writeFileSync(
   'export declare const inject: string[]\nexport declare function apply(ctx: unknown): void\n'
 )
 
-console.log(`built ${pkg.name}: lib/index.js, lib/client.js, lib/types/*`)
+console.log(`built ${pkg.name}: lib/index.js, lib/shim.js, lib/client.js, lib/types/*`)

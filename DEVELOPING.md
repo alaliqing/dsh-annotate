@@ -7,22 +7,23 @@ cd ~/codeData/private_program/dsh-annotate
 node scripts/dev.mjs            # or: --base /demo/ --app-port 5199 --port 3099 --open
 ```
 
-That creates a **dedicated** DSH profile (`~/.dsh/profiles/dsh-annotate-dev`)
-which loads both packages from this checkout and previews the bundled fixture,
-boots the harness on its own port, and prints the tokenised URL. Your daily
-profile is never touched.
+That starts the bundled fixture (an ordinary local web server) plus a
+**dedicated, configuration-free** DSH profile (`~/.dsh/profiles/dsh-annotate-dev`)
+loading this checkout, and prints the tokenised URL. Your daily profile is never
+touched, and nothing in the profile tells the plugin where to look — it has to
+*find* the fixture, exactly like a user's own project.
 
-Then: open a conversation, press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd>. The tab
-starts the fixture dev server itself — no terminal juggling, no URL typing.
+Then: open a conversation, press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd>, and click
+the fixture in the list.
 
 ## What needs a restart
 
 | You changed | To see it |
 | --- | --- |
-| `packages/dsh-annotate/src/client.js`, `src/overlay.js` | `npm run build`, then **refresh the page** (the client half is served per file revision) |
-| `packages/dsh-annotate/src/host.js` | `npm run build`, then **restart `scripts/dev.mjs`** (host plugins load at boot) |
-| `packages/dsh-app-bridge/lib/index.js` | restart `scripts/dev.mjs` |
-| `examples/demo-app/*` | just reload the preview (it is served with `no-store`) |
+| `src/client.js`, `src/overlay.js` | `npm run build`, then **refresh the page** (the client half is served per file revision) |
+| `src/host.js` (discovery, proxy) | `npm run build`, then **restart `scripts/dev.mjs`** (host plugins load at boot) |
+| `src/shim.js` | `npm run build`, then reload the previewed page (it is injected per HTML response) |
+| `examples/demo-app/*` | reload the preview (served with `no-store`), or restart the script for server-side changes |
 
 `npm run check` = build + syntax-check both halves, and CI asserts `lib/` matches
 `src/` — so run `npm run build` before committing.
@@ -54,21 +55,13 @@ asset URLs escape the prefix and land on the harness root.
 
 ## Previewing a real project instead of the fixture
 
-1. In that project, add a script that serves the dev build under a prefix:
-   `"dev:panel": "IDD_BASE=/app/ vite --host 127.0.0.1 --port 5180 --strictPort"`
-   and make browser-facing API paths respect the base.
-2. Point a profile at it:
-
-```yaml
-- insert:
-    - name: dsh-app-bridge
-      config: { target: "http://127.0.0.1:5180", prefix: "/app" }
-    - name: dsh-annotate
-      config: { command: "npm run dev:panel", port: 5180, base: "/app" }
-```
-
-3. Restart the harness. The tab runs that command **in the session's workspace**,
-   so a relative command is fine here.
+Nothing to configure: run that project's dev server, open the tab, click it in
+the list. That is the whole integration, and it is the path worth keeping
+honest — if a real project of yours does not show up or does not annotate, that
+is a bug in discovery or in the proxy/shim, not a missing setting. The optional
+`command` / `port` / `base` overrides exist for automated setups, and
+`dsh-app-bridge` remains for a fixed, base-prefixed mount when a project's URLs
+defeat the shim.
 
 ## The fixture
 
@@ -86,13 +79,17 @@ styles, viewport placement, live style tweaks — works on any page.
 ## Tests
 
 ```bash
+# with scripts/dev.mjs running (prints the tokenised URL):
+PLAYWRIGHT_MODULE=~/path/to/project/node_modules/playwright/index.mjs npm run test:proxy
 PLAYWRIGHT_MODULE=~/path/to/project/node_modules/playwright/index.mjs npm run test:gui
-# or install it here once: pnpm install
-npm run test:overlay     # drives the injected overlay on a bare page
+PLAYWRIGHT_MODULE=~/path/to/project/node_modules/playwright/index.mjs npm run test:overlay
 ```
 
-`test:gui` walks the whole flow against a running harness (pass the tokenised
-URL as argv) — auto-start, preview, pick, style edit, send.
+- `test:proxy` — discovery lists the running server, the proxied page loads,
+  `<base>` + shim are injected, a `location.origin` fetch is rewritten, and an
+  absolute WebSocket is relayed. No GUI needed.
+- `test:gui` — the whole product flow: list → click → annotate → send → back to
+  the list → reopen by typing only a port.
 
 ## Gotchas
 

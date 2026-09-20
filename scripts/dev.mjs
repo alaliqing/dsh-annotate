@@ -1,12 +1,12 @@
 /**
  * One command for the plugin development loop.
  *
- * Creates (or refreshes) a dedicated DSH profile that loads both packages from
- * this checkout and previews the bundled fixture, boots the harness on its own
- * port, and prints the tokenised URL. Nothing here touches your daily profile.
+ * Starts the bundled fixture (a plain local web server) and a dedicated DSH
+ * profile that loads this checkout with **no configuration**, then prints the
+ * tokenised URL. Nothing here touches your daily profile.
  *
  *   node scripts/dev.mjs
- *   node scripts/dev.mjs --base /demo/ --app-port 5199 --port 3099
+ *   node scripts/dev.mjs --app-port 5199 --port 3099
  *   node scripts/dev.mjs --open             # open the GUI in a browser
  *
  * Changing the client half only needs a page refresh; changing the host half or
@@ -30,7 +30,7 @@ const profile = String(flag('profile', 'dsh-annotate-dev'))
 const harnessPort = Number(flag('port', 3099))
 const appPort = Number(flag('app-port', 5180))
 const base = (() => {
-  const raw = String(flag('base', '/app/')).trim()
+  const raw = String(flag('base', '/')).trim()
   if (!raw || raw === '/') return '/'
   const withLead = raw.startsWith('/') ? raw : `/${raw}`
   return withLead.endsWith('/') ? withLead : `${withLead}/`
@@ -91,16 +91,9 @@ function seedProfile() {
     compressionThresholdBytes: 1024
 - insert:
     # Same-origin bridge: the fixture appears on the harness origin under ${prefix}
-    - name: dsh-app-bridge
-      config:
-        target: http://127.0.0.1:${appPort}
-        prefix: ${prefix}
-    # Annotation tab: starts the fixture itself and previews ${base}
+    # Zero configuration on purpose: the tab discovers whatever is running and
+    # opens it through the proxy. This mirrors what a user installs.
     - name: dsh-annotate
-      config:
-        command: ${JSON.stringify(command)}
-        port: ${appPort}
-        base: ${JSON.stringify(base)}
 `
   writeFileSync(join(profileDir, 'cordis.patch.yml'), patch)
 
@@ -118,9 +111,16 @@ function seedProfile() {
 // ---------------------------------------------------------------- harness
 
 console.log(`profile      ${profileDir}`)
-console.log(`previewed    ${command}`)
-console.log(`bridge       http://127.0.0.1:${harnessPort}${base}  ->  http://127.0.0.1:${appPort}${base}`)
+console.log(`fixture      ${command}`)
 seedProfile()
+
+// The fixture is started here, like any dev server you would already have
+// running: the plugin's job is to find it, not to own it.
+const fixtureProc = spawn('node', [fixture, '--port', String(appPort), '--base', base], {
+  stdio: ['ignore', 'pipe', 'pipe'],
+})
+fixtureProc.stdout.on('data', (chunk) => process.stdout.write('  │ ' + chunk))
+fixtureProc.stderr.on('data', (chunk) => process.stdout.write('  │ ' + chunk))
 
 const child = spawn('dsh', ['--profile', profile, '--no-open'], {
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -136,7 +136,7 @@ const forward = (chunk) => {
     url = match[0]
     console.log('\n' + '─'.repeat(72))
     console.log('  harness ready:  ' + url)
-    console.log('  open a conversation, press ⌘⇧B, the fixture starts itself')
+    console.log('  open a conversation, press ⌘⇧B — the fixture is listed, click it')
     console.log('  client-half edits: npm run build then refresh · host-half: restart this script')
     console.log('─'.repeat(72) + '\n')
     if (wantOpen) spawn('open', [url], { stdio: 'ignore', detached: true }).unref()
@@ -146,13 +146,15 @@ child.stdout.on('data', forward)
 child.stderr.on('data', forward)
 
 const shutdown = (signal) => {
-  console.log(`\n· ${signal} — stopping harness`)
+  console.log(`\n· ${signal} — stopping harness and fixture`)
   child.kill('SIGTERM')
+  fixtureProc.kill('SIGTERM')
   setTimeout(() => process.exit(0), 300)
 }
 process.on('SIGINT', () => shutdown('SIGINT'))
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 child.on('exit', (code) => {
   console.log(`· harness exited (${code})`)
+  fixtureProc.kill('SIGTERM')
   process.exit(code ?? 0)
 })
