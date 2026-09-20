@@ -201,13 +201,14 @@ the fixture's ground rules.
 
 ## Direction
 
-The target shape is Codex's in-app browser rather than "preview this project":
-open any URL in the sidebar, annotate what is on screen, send the comments.
-Today the plugin only annotates Same-Origin pages and needs a project to be
-configured; [docs/PLAN-sidebar-browser.md](docs/PLAN-sidebar-browser.md) lays out
-the move to a zero-config proxy, real navigation, URL suggestions, and a
-one-package install — plus the one limit no web page can cross (a cross-origin
-iframe's DOM is unreadable; a browser extension is the only full escape hatch).
+The target shape is Codex's in-app browser, scoped to **local** web: open the
+sidebar tab, it lists the local dev servers that are actually running, one click
+opens one — and annotation works on it immediately, with no per-project
+configuration. Install once, restart once.
+[docs/PLAN-sidebar-browser.md](docs/PLAN-sidebar-browser.md) has the plan,
+including the one non-obvious requirement (a page on `:5173` is cross-origin
+from the harness, so detection has to be paired with a loopback proxy on the
+harness origin to be annotatable at all).
 
 ## Status
 
