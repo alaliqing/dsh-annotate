@@ -15,7 +15,7 @@ Two Cordis plugins:
 ### A. Just try it (nothing of yours involved)
 
 ```bash
-git clone <this-repo> && cd dsh-annotate
+cd ~/codeData/private_program/dsh-annotate     # this checkout
 node scripts/dev.mjs
 ```
 
@@ -32,8 +32,9 @@ listed → click it → annotate.
    install it once (`npm i -g pnpm`) or skip it and run pnpm inside the profile:
 
    ```bash
+   REPO=~/codeData/private_program/dsh-annotate     # this checkout
    cd ~/.dsh/profiles/web
-   npx --yes pnpm@10 add link:<repo>/packages/dsh-annotate
+   npx --yes pnpm@10 add link:$REPO/packages/dsh-annotate
    ```
 
    Then append this to `~/.dsh/profiles/web/cordis.patch.yml`:
@@ -109,59 +110,47 @@ loaded as           <harness>/__dsh_anno/<encoded target>/settings
 mapped back to      http://127.0.0.1:5173/settings
 ```
 
-The proxy injects a `<base>` and a small shim (so the app's own asset, API and
-WebSocket URLs stay inside it), forwards upgrades through one relay path, and
-scopes the app's cookies per target so nothing leaks into the harness. Only
-loopback targets are ever probed or opened by discovery.
+Root-absolute URLs (`/src/main.tsx`, `/@vite/client`) are the hard part: a
+`<base>` cannot help, because parsing `/x` replaces the whole path. So the proxy
+rewrites them in HTML, injects an import map for the module graph, and a small
+shim prefixes what only appears at runtime (`fetch`, `XHR`, `EventSource`,
+`WebSocket`, `pushState`). Upgrades go through one relay path, and the app's
+cookies are scoped per target so nothing leaks into the harness. Only loopback
+targets are ever probed or opened.
 
 ## Install (private, from disk)
 
+The short version is in [Quickstart](#b-use-it-on-your-own-project); this is the
+same thing spelled out, for a profile that has never had the plugin:
+
 ```bash
-# in the DSH profile that should load them
+REPO=~/codeData/private_program/dsh-annotate       # this checkout
+
+# 1. the package (pnpm is what `dsh plugin` shells out to; this form needs none)
 cd ~/.dsh/profiles/web
-pnpm add link:<path-to-repo>/packages/dsh-app-bridge
-pnpm add link:<path-to-repo>/packages/dsh-annotate
+npx --yes pnpm@10 add link:$REPO/packages/dsh-annotate
 
-# mount them (cordis.patch.yml)
-#   - insert:
-#       - name: dsh-app-bridge
-#         config: { target: http://127.0.0.1:5180, prefix: /app }
-#       - name: dsh-annotate
+# 2. the mount — append to ~/.dsh/profiles/web/cordis.patch.yml
+#    - insert:
+#        - name: dsh-annotate
 
-# restart the harness
+# 3. restart the harness (mounts and host halves are read at boot)
 dsh web
 ```
 
-## Pointing it at a project
+Then, with any local dev server running: <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd> →
+pick it from the list → annotate → **发给 AI** (or <kbd>⌘</kbd>-click to send at
+once). Nothing about the project has to be configured, and nothing in the project
+has to change.
 
-Two config blocks have to agree, and the project has to serve under one prefix:
+Optional, for projects whose URLs defeat the shim (rare): `dsh-app-bridge` can
+mount a base-prefixed dev server at a fixed path instead —
 
 ```yaml
 - insert:
     - name: dsh-app-bridge
-      config: { target: "http://127.0.0.1:5180", prefix: "/app" }
-    - name: dsh-annotate
-      config:
-        command: "npm run dev:panel"   # or argv: [...]; default `npm run dev:panel`
-        port: 5180                     # default 5180
-        base: "/app"                   # default /app
+      config: { target: "http://127.0.0.1:5173", prefix: "/app" }
 ```
-
-```json
-{ "scripts": { "dev:panel": "IDD_BASE=/app/ vite --host 127.0.0.1 --port 5180 --strictPort" } }
-```
-
-`dsh-annotate` runs that command in the session's workspace when the tab opens,
-waits for the port, and reuses an already-running server instead of fighting for
-the port. Browser-facing API paths must follow the base (`import.meta.env.BASE_URL`)
-or they will miss the prefix. Nothing else about the project is assumed — the
-bundled `examples/demo-app` is a zero-dependency example that satisfies exactly
-these requirements.
-
-Then: `⌘⇧B` (or `⌘⇧A`, the conversation header's **标注** button, or the right
-sidebar's `+` → guide entry) → the preview loads → pick elements, write notes,
-optionally tweak styles live → **发给 AI** puts one structured block in the
-composer.
 
 ## What an annotation carries
 
@@ -188,8 +177,11 @@ defects the note describes the symptom, and the fix is verified by re-rendering.
 ## Requirements
 
 - DeepSeek Harness with a web profile (`dsh web`)
-- `pnpm` on PATH for `dsh plugin` commands (or `npx pnpm@10`)
-- The consuming project: Node + a dev server that accepts a base prefix
+- `pnpm` on PATH for `dsh plugin` commands, or `npx --yes pnpm@10` (needed once,
+  to install)
+- A local dev server to look at — anything that answers `GET /` with HTML on a
+  loopback port. No configuration, no base prefix, no special script
+- Playwright only to run this repo's tests
 
 ## Development
 
