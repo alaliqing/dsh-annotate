@@ -1,4 +1,28 @@
+# dependencies
 node_modules/
-.DS_Store
+
+# build and test output
 tests/shots/
+coverage/
+*.tsbuildinfo
+
+# local tooling caches (some sandboxes force these inside the checkout)
+.npm-cache/
+.pnpm-store/
+.pw-browsers/
+
+# environment
+.env
+.env.*
+!.env.example
+
+# logs
 *.log
+npm-debug.log*
+
+# editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

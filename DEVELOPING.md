@@ -1,104 +1,97 @@
-# Developing the plugin
+# Developing dsh-annotate
 
-## TL;DR
+## Setup
 
-```bash
-cd ~/codeData/private_program/dsh-annotate
-node scripts/dev.mjs            # or: --base /demo/ --app-port 5199 --port 3099 --open
+```sh
+npm ci
+npx playwright install chromium
+npm run check   # builds lib/, parses every file, validates the message catalog
+npm test        # the acceptance gate
 ```
 
-That starts the bundled fixture (an ordinary local web server) plus a
-**dedicated, configuration-free** DSH profile (`~/.dsh/profiles/dsh-annotate-dev`)
-loading this checkout, and prints the tokenised URL. Your daily profile is never
-touched, and nothing in the profile tells the plugin where to look — it has to
-*find* the fixture, exactly like a user's own project.
+Node.js 20 or newer. `dsh` on `PATH` is only needed for the live harness loop
+below; the automated suite runs against a bundled fixture.
 
-Then: open a conversation, press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd>, and click
-the fixture in the list.
+## Build and reload
 
-## What needs a restart
+`packages/dsh-annotate/lib/*` is generated from `src/` **and committed**, because
+the harness loads those files directly and an install must not need a build step.
 
-| You changed | To see it |
+| You changed | Do this |
 | --- | --- |
-| `src/client.js`, `src/overlay.js` | `npm run build`, then **refresh the page** (the client half is served per file revision) |
-| `src/host.js` (discovery, proxy) | `npm run build`, then **restart `scripts/dev.mjs`** (host plugins load at boot) |
-| `src/shim.js` | `npm run build`, then reload the previewed page (it is injected per HTML response) |
-| `examples/demo-app/*` | reload the preview (served with `no-store`), or restart the script for server-side changes |
+| `src/client.js` or `src/i18n.js` | `npm run build`, then refresh the harness page |
+| `src/overlay.js`, `src/shim.js` | `npm run build`, restart the harness (the host caches the injected sources), then reload the preview |
+| `src/host.js` | `npm run build`, restart the harness |
+| `packages/dsh-app-bridge/` | restart the harness (no build step) |
 
-`npm run check` = build + syntax-check both halves, and CI asserts `lib/` matches
-`src/` — so run `npm run build` before committing.
-
-## Configuration
-
-`dsh-annotate` takes everything project-specific from the profile patch:
-
-```yaml
-- name: dsh-annotate
-  config:
-    command: "npm run dev:panel"      # or argv: ["node", "/abs/server.mjs", "--port", "5180"]
-    port: 5180                        # where that dev server listens
-    base: "/app"                      # the prefix it serves under
-    readyTimeoutMs: 45000             # how long start() waits for the port
-```
-
-```yaml
-- name: dsh-app-bridge
-  config:
-    target: "http://127.0.0.1:5180"   # same host:port as above
-    prefix: "/app"                    # same prefix as above
-    # wsPaths: ["/app/", "/app"]      # defaults to both spellings
-```
-
-`command`/`port`/`base` must agree with the bridge's `target`/`prefix`, and the
-project must serve its own assets under that prefix (`vite --base=/app/`), or its
-asset URLs escape the prefix and land on the harness root.
-
-## Previewing a real project instead of the fixture
-
-Nothing to configure: run that project's dev server, open the tab, click it in
-the list. That is the whole integration, and it is the path worth keeping
-honest — if a real project of yours does not show up or does not annotate, that
-is a bug in discovery or in the proxy/shim, not a missing setting. The optional
-`command` / `port` / `base` overrides exist for automated setups, and
-`dsh-app-bridge` remains for a fixed, base-prefixed mount when a project's URLs
-defeat the shim.
-
-## The fixture
-
-`examples/demo-app` is a zero-dependency, prefix-aware static server plus a page
-with the layouts the overlay has to survive: card grid, form with `textarea`,
-scroll region, fixed badge, two side-by-side pickers that must stay equal height,
-a token list and a live contrast readout. It also exposes `POST api/echo` and an
-SSE `api/stream`, so the bridge is exercised for real (methods, bodies, streaming).
-
-It is deliberately not a React app: the **component chain** in an annotation only
-appears when the previewed page runs a React dev build (the overlay reads the
-fiber). Everything else — selector, match count, semantic anchors, computed
-styles, viewport placement, live style tweaks — works on any page.
+Never edit `lib/` by hand. CI fails when `lib/` differs from a fresh build of
+`src/`, including for new untracked files.
 
 ## Tests
 
-```bash
-# with scripts/dev.mjs running (prints the tokenised URL):
-PLAYWRIGHT_MODULE=~/path/to/project/node_modules/playwright/index.mjs npm run test:proxy
-PLAYWRIGHT_MODULE=~/path/to/project/node_modules/playwright/index.mjs npm run test:gui
-PLAYWRIGHT_MODULE=~/path/to/project/node_modules/playwright/index.mjs npm run test:overlay
+`npm test` runs two scripts:
+
+- `tests/distribution.mjs` — asserts `npm pack` ships the host, client, shim and
+  overlay files.
+- `tests/reliability.mjs` — the assertion-based Chromium suite. It boots
+  disposable loopback servers, loads the **real built client, shim and overlay**
+  through a React fixture, and drives the actual UI.
+
+The suite owns and closes every listener and browser it opens, in a `finally`.
+It uses port 5180 on purpose, to catch a regression in the default discovery
+list; set `REVIEW_TEST_PORT` to move it when that port is busy. Do not terminate
+unrelated dev servers to make it pass.
+
+Two environment escapes exist for unusual setups: `REVIEW_NODE_MODULES` points at
+another install's `node_modules`, and `PLAYWRIGHT_MODULE` at Playwright itself.
+
+What the suite deliberately does **not** prove: real provider/model behaviour.
+The React fixture simulates session acceptance and rejection, and no model is
+called. Native harness loading is a manual step.
+
+### Writing assertions
+
+- Every behaviour change needs an assertion here, or a stated reason it cannot
+  be covered.
+- Never assert on a fixed delay for something the browser animates. Wait for the
+  state you expect — `settled()` in the suite is the pattern for marker geometry.
+- Screenshots land in the ignored `tests/shots/`, and CI uploads them when a run
+  fails.
+
+## Live harness loop
+
+```sh
+node scripts/dev.mjs
 ```
 
-- `test:proxy` — discovery lists the running server, the proxied page loads,
-  `<base>` + shim are injected, a `location.origin` fetch is rewritten, and an
-  absolute WebSocket is relayed. No GUI needed.
-- `test:gui` — the whole product flow: list → click → annotate → send → back to
-  the list → reopen by typing only a port.
+This seeds a dedicated `dsh-annotate-dev` profile (never your daily profile),
+starts the bundled fixture on 5180 and the harness on 3099, and prints the
+tokenised URL. It requires the `dsh` CLI and pnpm. Use `--port` / `--app-port`
+to avoid existing listeners, and `--open` to launch a browser. The script owns
+both processes and stops them on exit.
 
-## Gotchas
+Manual checks worth running after a change to the preview path:
 
-- A bridge `prefix` of `/` would fight the harness for its own root: use a real
-  prefix such as `/app`.
-- Without a `command`, the host half assumes `npm run dev:panel`; if the project
-  has no such script the tab reports the failure and shows the log (▤ in the
-  toolbar) instead of silently doing nothing.
-- `lib/` is committed on purpose: `pnpm add link:…` installs then work without a
-  build step. CI fails if `lib/` drifts from `src/`.
-- The fixture and the harness are separate processes; stopping `scripts/dev.mjs`
-  stops the harness, and the fixture (started by the plugin) goes with it.
+1. Open a conversation, press `⌘/Ctrl⇧B`, and open the fixture from the list.
+2. Save an annotation, scroll both the window and the nested container inside
+   the fixture, and confirm the marker stays attached.
+3. Switch language and confirm both the panel and the marker labels change.
+4. `legacyProxy` is gone; the only preview path is the isolated loopback origin.
+
+## Internationalization
+
+Every user-visible string lives in `packages/dsh-annotate/src/i18n.js` and is read
+through `t('key')`. `npm run check` fails when a key is missing from either
+language, when a call site uses an unknown key, or when the host returns an error
+code without a matching message. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Design and boundaries
+
+The independent preview origin is the central decision: it preserves the app's
+own paths (so root-absolute assets, SPA routes and WebSocket upgrades work with
+no prefix) while keeping the preview's DOM and web storage out of the harness.
+It replaced an earlier same-origin proxy, which could never isolate anything.
+
+[The reliability plan](docs/PLAN-reliability-and-ux.md) records what was built
+and which boundaries were accepted. [The sidebar plan](docs/PLAN-sidebar-browser.md)
+is the earlier design document; its same-origin proxy section is historical.

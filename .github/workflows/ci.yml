@@ -1,18 +1,55 @@
-name: ci
+name: CI
+
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   check:
+    name: build and syntax (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: committed lib/ is in sync with src/
+        run: |
+          git diff --exit-code -- packages/dsh-annotate/lib packages/dsh-app-bridge/lib
+          test -z "$(git ls-files --others --exclude-standard -- packages/dsh-annotate/lib packages/dsh-app-bridge/lib)"
+
+  test:
+    name: browser regression suite
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # No dependencies to install: both packages only use node builtins, and
-      # the client half is a plain browser bundle.
-      - run: npm run check
-      - name: lib/ is in sync with src/
-        run: git diff --exit-code -- packages/dsh-annotate/lib packages/dsh-app-bridge/lib
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - name: upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-shots
+          path: tests/shots/
+          if-no-files-found: ignore
+          retention-days: 7

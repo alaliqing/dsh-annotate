@@ -1,0 +1,53 @@
+name: Release
+
+# Publishing is tag-driven: pushing `v*` publishes whatever the two package
+# manifests say. Bump both versions, commit, then tag.
+#
+#   npm version --no-git-tag-version --workspace packages/dsh-annotate 0.1.1
+#   git commit -am "release 0.1.1" && git tag v0.1.1 && git push --follow-tags
+#
+# Authentication is either a repository secret named NPM_TOKEN, or npm trusted
+# publishing (OIDC) once configured for both packages on npmjs.com.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test:distribution
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:reliability
+      - name: publish dsh-annotate
+        run: npm publish --access public --provenance
+        working-directory: packages/dsh-annotate
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: publish dsh-app-bridge
+        run: npm publish --access public --provenance
+        working-directory: packages/dsh-app-bridge
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: github release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag

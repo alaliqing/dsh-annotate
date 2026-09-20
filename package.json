@@ -2,19 +2,45 @@
   "name": "dsh-annotate-workspace",
   "private": true,
   "version": "0.0.0",
-  "description": "Element annotation for DeepSeek Harness: a same-origin preview bridge and a right-sidebar review tab",
+  "description": "Monorepo for dsh-annotate, an element annotation and review panel for the DeepSeek Harness web client",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alaliqing/dsh-annotate.git"
+  },
+  "homepage": "https://github.com/alaliqing/dsh-annotate#readme",
+  "bugs": {
+    "url": "https://github.com/alaliqing/dsh-annotate/issues"
+  },
+  "author": "qinjing <alaliqing@gmail.com>",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "annotation",
+    "review",
+    "devtools",
+    "ui-review"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "node packages/dsh-annotate/build.mjs",
-    "check": "npm run build && node --check packages/dsh-annotate/lib/index.js && node --check packages/dsh-annotate/lib/client.js && node --check packages/dsh-app-bridge/lib/index.js",
+    "check": "node scripts/check.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:app": "node examples/demo-app/server.mjs --port 5180",
-    "test:overlay": "node tests/overlay.mjs",
-    "test:gui": "node tests/gui-smoke.mjs",
-    "test:proxy": "node tests/proxy.mjs"
+    "test": "node tests/distribution.mjs && node tests/reliability.mjs",
+    "test:distribution": "node tests/distribution.mjs",
+    "test:reliability": "node tests/reliability.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.62.0"
+    "playwright": "^1.62.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
   }
 }

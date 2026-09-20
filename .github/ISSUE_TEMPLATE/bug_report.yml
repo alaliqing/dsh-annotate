@@ -1,0 +1,73 @@
+name: Bug report
+description: Something in the panel, the preview proxy, or the discovery list does not behave as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For anything security-relevant, please follow
+        [SECURITY.md](https://github.com/alaliqing/dsh-annotate/blob/main/SECURITY.md)
+        instead of filing a public issue.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The `dsh-annotate` version from its package.json, or the commit SHA.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Harness version, Node version, OS, and browser.
+      placeholder: DSH 0.1.5-rc.2, Node 22.14, macOS 15.3, Chromium 141
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Service discovery / the list face
+        - Preview fails to load or render
+        - Element picking or marker placement
+        - Comment editor, list, or undo
+        - Sending or attaching to the composer
+        - Annotation storage / session or route separation
+        - Language switch
+        - dsh-app-bridge
+        - Build, tests, or packaging
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact actions, including the URL you previewed and what you clicked.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: |
+        Include console or host-side errors if you have them. Screenshots help.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I read the limitations section of the README and this is not a documented boundary.
+          required: true
+        - label: I searched existing issues for the same problem.
+          required: true
