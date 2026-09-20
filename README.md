@@ -152,6 +152,32 @@ mount a base-prefixed dev server at a fixed path instead —
       config: { target: "http://127.0.0.1:5173", prefix: "/app" }
 ```
 
+## Using the panel
+
+```
+←  →  ⟳   [ address ]                      ☰   ?      ← navigation, list, help
+┌───────────────────────────────────────────────────┐
+│                  the page you picked              │
+├───────────────────────────────────────────────────┤
+│ ① button.idd-… · 这个框和左边不一样高              │  annotations, newest last
+├───────────────────────────────────────────────────┤
+│  ✎ 标记    ↗ 打开                    2 条    [发送] │  actions at the bottom
+└───────────────────────────────────────────────────┘
+```
+
+- **标记** turns element picking on; click an element in the page, write the note,
+  <kbd>Enter</kbd> saves it. **<kbd>Esc</kbd> leaves picking** — browse, scroll or
+  follow a link, then press 标记 again to keep annotating.
+- <kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click an element to write and send in one step.
+- **「样式」** in the card edits font size, padding, gap, radius and colours, live
+  on the page; the edits travel with the annotation.
+- **发送** delivers the collected annotations straight to the conversation.
+  <kbd>⌥</kbd>/<kbd>Alt</kbd>+click keeps them in the composer instead, if you want
+  to add your own words first. If the harness refuses the automatic send (for
+  example a session owned by another instance), the block stays in the composer
+  with a chip and the panel says so.
+- **?** (top right) opens the short version of all of this.
+
 ## What an annotation carries
 
 Enough to find the element without a screenshot: selector path **and how many

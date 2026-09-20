@@ -614,6 +614,8 @@
       } else if (event.key === 'Escape') {
         event.preventDefault()
         closeCard()
+        // Esc means "leave annotation mode", not just "close this card".
+        setMode('idle')
       }
     })
     root.appendChild(card)
