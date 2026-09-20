@@ -98,17 +98,6 @@
       '.dsa-card textarea{display:block;width:100%;min-height:62px;max-height:220px;resize:vertical;border:0;outline:none;',
       'padding:9px 10px;background:transparent;color:inherit;font:inherit;font-size:12.5px}',
       '.dsa-card footer{display:flex;align-items:center;gap:8px;padding:6px 8px 8px 10px;border-top:1px solid ' + hair + '}',
-      // Codex parity: tweak the element's own styles and see the page change.
-      '.dsa-styles{border-top:1px solid ' + hair + ';padding:7px 8px 8px;display:none}',
-      '.dsa-styles[data-open="true"]{display:block}',
-      '.dsa-styles .dsa-srow{display:grid;grid-template-columns:88px 1fr;gap:6px;align-items:center;margin-bottom:5px}',
-      '.dsa-styles .dsa-slabel{color:' + muted + ';font-size:10px;text-align:right;white-space:nowrap}',
-      '.dsa-styles input{border:1px solid ' + hair + ';border-radius:4px;background:' + fieldBg + ';color:' + ink + ';',
-      'font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;padding:3px 6px;outline:none;min-width:0}',
-      '.dsa-styles input:focus{border-color:' + MARKER + '}',
-      '.dsa-styles input[type=color]{padding:1px;height:22px;min-width:44px}',
-      '.dsa-styles .dsa-sfoot{display:flex;align-items:center;gap:8px;margin-top:6px}',
-      '.dsa-styles .dsa-sfoot .dsa-hint{flex:1;color:' + muted + ';font-size:10px}',
       '.dsa-card footer .dsa-hint{flex:1;color:' + muted + ';font-size:10.5px}',
       '.dsa-btn{all:unset;cursor:pointer;padding:4px 10px;border-radius:4px;border:1px solid ' + hair + ';font-size:11.5px}',
       '.dsa-btn:hover{border-color:' + MARKER + ';color:' + MARKER + '}',
@@ -265,6 +254,14 @@
       classes: (el.getAttribute('class') || '').split(/\s+/).filter(Boolean).slice(0, 4),
       text: clip(el.textContent || '', 120),
       rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },
+      // Pins live in document space: mixing a viewport rect with the scroll
+      // offset at render time makes them drift instead of following the element.
+      doc: {
+        x: Math.round(rect.x + window.scrollX),
+        y: Math.round(rect.y + window.scrollY),
+        w: Math.round(rect.width),
+        h: Math.round(rect.height),
+      },
       placement: placementOf(rect),
       page: location.pathname + location.search,
       viewport: { w: window.innerWidth, h: window.innerHeight },
@@ -415,6 +412,15 @@
     card.style.top = Math.max(8, top) + sy + 'px'
   }
 
+  /** Where a pin belongs, in document coordinates. Annotations captured before
+   *  `doc` existed fall back to their (stale) viewport rect plus the scroll
+   *  offset that was in effect — best effort, and it self-heals on the next
+   *  click, which rewrites the record. */
+  function pinAnchor(ann) {
+    if (ann.doc) return { x: ann.doc.x + ann.doc.w / 2, y: ann.doc.y }
+    return { x: ann.rect.x + window.scrollX + ann.rect.w / 2, y: ann.rect.y + window.scrollY }
+  }
+
   function renderPins() {
     pinLayer.innerHTML = ''
     state.annotations.forEach(function (ann, index) {
@@ -422,8 +428,9 @@
       pin.className = 'dsa-pin'
       pin.textContent = String(index + 1)
       pin.title = ann.comment
-      pin.style.left = (ann.rect.x + window.scrollX + ann.rect.w / 2) + 'px'
-      pin.style.top = (ann.rect.y + window.scrollY) + 'px'
+      var anchor = pinAnchor(ann)
+      pin.style.left = anchor.x + 'px'
+      pin.style.top = anchor.y + 'px'
       pin.setAttribute('data-open', state.drafting && state.drafting.id === ann.id ? 'true' : 'false')
       pin.addEventListener('click', function (event) {
         event.stopPropagation()
@@ -432,8 +439,9 @@
           post('missing', { id: ann.id })
           return
         }
+        var live = detailOf(el)
         openCard(
-          { id: ann.id, detail: ann, comment: ann.comment, existing: true },
+          { id: ann.id, detail: Object.assign({}, ann, { doc: live.doc, rect: live.rect }), comment: ann.comment, existing: true },
           el
         )
         post('focus', { id: ann.id })
@@ -458,120 +466,18 @@
 
   // ------------------------------------------------------------------ card UI
 
-  var STYLE_FIELDS = [
-    { key: 'font-size', kind: 'text' },
-    { key: 'padding', kind: 'text' },
-    { key: 'gap', kind: 'text' },
-    { key: 'border-radius', kind: 'text' },
-    { key: 'color', kind: 'color' },
-    { key: 'background-color', kind: 'color' }
-  ]
-
-  /** Live style overrides for the open card: original inline values kept so
-   *  cancelling puts the page back exactly as it was. */
-  var styleDraft = { edits: {}, originals: {}, el: null }
-
-  function toHex(value) {
-    var m = String(value || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
-    if (!m) return '#000000'
-    var hex = '#'
-    for (var i = 1; i <= 3; i++) {
-      var part = Number(m[i]).toString(16)
-      hex += part.length === 1 ? '0' + part : part
-    }
-    return hex
-  }
-
-  function revertStyles() {
-    if (styleDraft.el) {
-      Object.keys(styleDraft.originals).forEach(function (key) {
-        var original = styleDraft.originals[key]
-        try {
-          if (original) styleDraft.el.style.setProperty(key, original)
-          else styleDraft.el.style.removeProperty(key)
-        } catch (e) {
-          /* detached node */
-        }
-      })
-    }
-    styleDraft = { edits: {}, originals: {}, el: null }
-  }
-
-  function applyStyle(key, value) {
-    var el = styleDraft.el
-    if (!el) return
-    if (!(key in styleDraft.originals)) {
-      styleDraft.originals[key] = el.style.getPropertyValue(key) || ''
-    }
-    var from = getComputedStyle(el).getPropertyValue(key)
-    try {
-      if (value) el.style.setProperty(key, value)
-      else el.style.removeProperty(key)
-    } catch (e) {
-      return
-    }
-    styleDraft.edits[key] = { from: String(from || '').trim(), to: value }
-    if (!value || String(from || '').trim() === String(value).trim()) delete styleDraft.edits[key]
-  }
-
-  function buildStyles() {
-    var wrap = document.createElement('div')
-    wrap.className = 'dsa-styles'
-    // Built on demand, so it starts open — the card's toggle only opens/closes it.
-    wrap.setAttribute('data-open', 'true')
-    var el = state.anchor
-    STYLE_FIELDS.forEach(function (field) {
-      var computed = ''
-      try {
-        computed = String(getComputedStyle(el).getPropertyValue(field.key) || '').trim()
-      } catch (e) {
-        computed = ''
-      }
-      var row = document.createElement('div')
-      row.className = 'dsa-srow'
-      var label = document.createElement('span')
-      label.className = 'dsa-slabel dsa-mono'
-      label.textContent = field.key
-      var input = document.createElement('input')
-      input.type = field.kind === 'color' ? 'color' : 'text'
-      input.value = field.kind === 'color' ? toHex(computed) : computed
-      input.spellcheck = false
-      input.addEventListener('input', function () {
-        applyStyle(field.key, input.value)
-        render()
-      })
-      row.appendChild(label)
-      row.appendChild(input)
-      wrap.appendChild(row)
-    })
-    var foot = document.createElement('div')
-    foot.className = 'dsa-sfoot'
-    var hint = document.createElement('span')
-    hint.className = 'dsa-hint dsa-mono'
-    hint.textContent = '改动实时生效，随批注一起提交'
-    var reset = document.createElement('button')
-    reset.type = 'button'
-    reset.className = 'dsa-btn'
-    reset.textContent = '复原'
-    reset.addEventListener('click', function () {
-      revertStyles()
-      var open = card.querySelector('.dsa-styles')
-      card.removeChild(open)
-      card.appendChild(buildStyles())
-    })
-    foot.appendChild(hint)
-    foot.appendChild(reset)
-    wrap.appendChild(foot)
-    return wrap
-  }
-
   function closeCard() {
-    revertStyles()
     if (card && card.parentNode) card.parentNode.removeChild(card)
     card = null
     state.drafting = null
     state.anchor = null
+    // Writing is a detour, not a destination: coming back from a card must
+    // leave picking armed, so the next element can be annotated right away.
+    var resume = state.mode === 'writing'
+    state.mode = 'picking'
+    state.selected = null
     render()
+    if (resume) post('mode', { mode: state.mode, count: state.annotations.length })
   }
 
   function openCard(draft, el) {
@@ -589,20 +495,9 @@
       '</header>' +
       '<textarea placeholder="写一句要改什么…（Shift+Enter 换行）"></textarea>' +
       '<footer>' +
-      '<button type="button" class="dsa-btn" data-act="styles" title="像 Codex 那样直接改字体/间距/颜色，页面上实时预览">样式</button>' +
       '<span class="dsa-hint dsa-mono">Enter 保存 · Esc 取消</span>' +
       '<button type="button" class="dsa-btn primary" data-act="save">保存</button>' +
       '</footer>'
-    styleDraft = { edits: {}, originals: {}, el: el }
-    card.querySelector('[data-act="styles"]').addEventListener('click', function (event) {
-      event.preventDefault()
-      var panel = card.querySelector('.dsa-styles')
-      if (panel) {
-        card.removeChild(panel)
-        return
-      }
-      card.appendChild(buildStyles())
-    })
     var area = card.querySelector('textarea')
     area.value = draft.comment || ''
     card.querySelector('[data-act="close"]').addEventListener('click', closeCard)
@@ -635,22 +530,17 @@
     }
     var draft = state.drafting
     var detail = detailOf(state.anchor)
-    var styleEdits = Object.assign({}, styleDraft.edits)
-    var hasEdits = Object.keys(styleEdits).length > 0
     if (draft.existing) {
       state.annotations = state.annotations.map(function (ann) {
         return ann.id === draft.id
-          ? Object.assign({}, ann, { comment: text, rect: detail.rect, selector: detail.selector, styleEdits: hasEdits ? styleEdits : ann.styleEdits })
+          ? Object.assign({}, ann, { comment: text, rect: detail.rect, doc: detail.doc, selector: detail.selector })
           : ann
       })
     } else {
       state.annotations = state.annotations.concat([
-        Object.assign({ id: draft.id, comment: text, createdAt: Date.now() }, detail, hasEdits ? { styleEdits: styleEdits } : {}),
+        Object.assign({ id: draft.id, comment: text, createdAt: Date.now() }, detail),
       ])
     }
-    // The overrides are now part of the annotation, so stop tracking them as a
-    // draft: closing the card must not undo what the user asked for.
-    styleDraft = { edits: {}, originals: {}, el: null }
     save()
     var ship = state.sendOnCommit
     state.sendOnCommit = false
@@ -758,12 +648,34 @@
   window.addEventListener('keydown', function (event) {
     if (event.key === 'Escape' && !card) setMode('idle')
   }, true)
+  /** Re-anchor stored annotations to their live elements: layout can shift
+   *  under a pin (content growing above it, a route change, a resize). */
+  function resyncAnchors() {
+    var changed = false
+    state.annotations = state.annotations.map(function (ann) {
+      var el = query(ann.selector)
+      if (!el || !el.isConnected) return ann
+      var rect = el.getBoundingClientRect()
+      var doc = {
+        x: Math.round(rect.x + window.scrollX),
+        y: Math.round(rect.y + window.scrollY),
+        w: Math.round(rect.width),
+        h: Math.round(rect.height),
+      }
+      if (ann.doc && Math.abs(ann.doc.x - doc.x) < 1 && Math.abs(ann.doc.y - doc.y) < 1) return ann
+      changed = true
+      return Object.assign({}, ann, { doc: doc })
+    })
+    if (changed) save()
+  }
+
   window.addEventListener('scroll', function () {
     renderFrame()
     renderPins()
   }, true)
   window.addEventListener('resize', function () {
     renderFrame()
+    resyncAnchors()
     renderPins()
   })
 
