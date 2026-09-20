@@ -77,6 +77,11 @@ both English and Chinese, chosen by the user at runtime.
 Payload labels that are sent to the model (the annotation block) come from the
 same catalog. Keep both translations in sync when you add a key.
 
+The README is published in both languages too: `README.md` and
+`README.zh-CN.md`. A change to one that alters its structure, headings or claims
+should be mirrored in the other in the same pull request. `CONTRIBUTING.md`,
+`SECURITY.md` and `CHANGELOG.md` are English-only.
+
 ## Testing expectations
 
 - Every behaviour change needs an assertion in `tests/reliability.mjs`, or a

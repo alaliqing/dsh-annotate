@@ -1,5 +1,7 @@
 # dsh-annotate
 
+**English** | [简体中文](README.zh-CN.md)
+
 [![CI](https://github.com/alaliqing/dsh-annotate/actions/workflows/ci.yml/badge.svg)](https://github.com/alaliqing/dsh-annotate/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/dsh-annotate.svg)](https://www.npmjs.com/package/dsh-annotate)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
