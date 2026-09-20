@@ -1,12 +1,18 @@
 # Plan: sidebar annotation for whatever local web is running
 
-> **Status.** Work 1–3 are implemented and verified: discovery (`detect`), the
-> dynamic loopback proxy (with `<base>` + shim, per-target cookies, WS relay) and
-> the two-face pane. Install is one package plus a restart, with no
-> configuration. `tests/proxy.mjs` covers the proxy contract and
-> `tests/gui-smoke.mjs` the product flow. What remains is polish: multiple open
-> pages, richer suggestions (recent URLs, per-workspace scripts), and the
-> boundaries in section 4.
+> **Historical document.** This is the plan that produced discovery and the
+> two-face pane, and it is kept for the reasoning it records. Its **proxy
+> design is superseded**: the shipped plugin previews each app on its own
+> isolated loopback origin, so the app's own paths are preserved and its DOM and
+> web storage stay out of the harness. There is no `/__dsh_anno/<enc>/…` route
+> and no `legacyProxy` option. The validation scripts this document names
+> (`tests/proxy.mjs`, `tests/gui-smoke.mjs`) were removed; `tests/reliability.mjs`
+> is the current acceptance suite. See [DEVELOPING.md](../DEVELOPING.md) and
+> [PLAN-reliability-and-ux.md](PLAN-reliability-and-ux.md) for the current state.
+
+> **Status at the time.** Work 1–3 were implemented and verified: discovery
+> (`detect`), the dynamic loopback proxy (with `<base>` + shim, per-target
+> cookies, WS relay) and the two-face pane.
 
 > Replaces the earlier "annotate any web" draft. Scope is deliberately small:
 > **local web only, zero configuration, discovery instead of setup.**

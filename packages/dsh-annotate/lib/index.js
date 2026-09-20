@@ -7,11 +7,13 @@
  *  1. `detect` — find loopback web servers that are really listening and
  *     answering, with their page titles, plus a hint on how to start one when
  *     nothing is up.
- *  2. A **dynamic loopback proxy** at `<prefix>/<encoded target>/…` so the
- *     picked page becomes Same-Origin with the harness and its DOM is readable
- *     (a cross-origin iframe can never be annotated). HTML gets a `<base>` and a
- *     small shim, upgrades go through one exact relay path, cookies are scoped
- *     per target.
+ *  2. A **loopback preview origin**: one ephemeral server per session/app, on
+ *     `localhost` or `127.0.0.1` with a hostname different from the harness.
+ *     The browser sees the app's own paths, so root-absolute scripts, styles and
+ *     SPA routes work with no prefix, while the preview's DOM and web storage
+ *     stay isolated from the harness. A shim and the overlay are injected into
+ *     every HTML document, WebSocket upgrades are relayed per target, and
+ *     cookies are namespaced and partitioned.
  *  3. Optional process control for people who prefer the plugin to start the
  *     server (`command` / `port` / `base`).
  *
@@ -19,10 +21,11 @@
  */
 
 import http from 'node:http'
+import https from 'node:https'
 import { execFile } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 
 export const name = 'dsh-annotate'
 
@@ -32,7 +35,6 @@ const ROUTE = '/__dsh-annotate'
 const DEFAULT_PORT = 5180
 const DEFAULT_BASE = '/app'
 const DEFAULT_COMMAND = 'npm run dev:panel'
-const DEFAULT_PROXY_PREFIX = '/__dsh_anno'
 const WS_RELAY_PATH = '/__dsh_anno_ws'
 const LOG_LIMIT = 400
 
@@ -71,14 +73,90 @@ const SHIM_SRC = (() => {
   }
 })()
 
+const OVERLAY_SRC = (() => {
+  try {
+    return readFileSync(new URL('./overlay.js', import.meta.url), 'utf8')
+  } catch (error) {
+    console.warn('dsh-annotate: overlay unavailable —', String((error && error.message) || error))
+    return ''
+  }
+})()
+const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
+function isLocalTarget(url) {
+  return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password &&
+    ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+}
+
 const encodeTarget = (origin) => Buffer.from(origin, 'utf8').toString('base64url')
 const decodeTarget = (value) => Buffer.from(String(value), 'base64url').toString('utf8')
+
+/** `127.0.0.1:3099` -> 3099, `[::1]:3099` -> 3099, `localhost` -> 0.
+ *  `String(host).split(':')[1]` is wrong for bracketed IPv6 literals. */
+function hostPort(host) {
+  const text = String(host || '')
+  const close = text.lastIndexOf(']')
+  const colon = text.lastIndexOf(':')
+  if (colon === -1 || (close !== -1 && colon < close)) return 0
+  const value = Number(text.slice(colon + 1))
+  return Number.isInteger(value) && value > 0 && value < 65536 ? value : 0
+}
+
+/** The origin the browser actually used for this request. Behind a
+ *  TLS-terminating reverse proxy the socket is plain http, so an explicit
+ *  forwarded scheme wins over the socket. */
+function requestOrigin(req) {
+  const forwarded = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()
+  const scheme = forwarded === 'https' || forwarded === 'http' ? forwarded : req.socket.encrypted ? 'https' : 'http'
+  return `${scheme}://${req.headers.host}`
+}
+
+const originOf = (value) => {
+  try {
+    return new URL(value).origin
+  } catch (error) {
+    void error
+    return null
+  }
+}
+
+/** A preview server must never become a readable gateway for an unrelated page.
+ *  Chromium sends fetch metadata; Firefox and Safari send none, so fall back to
+ *  the browser's own Origin/Referer. */
+function allowedPreviewRequest(req, parentOrigin, previewOrigin) {
+  const parents = [parentOrigin, previewOrigin]
+  const fetchSite = req.headers['sec-fetch-site']
+  const fetchDest = req.headers['sec-fetch-dest']
+  if (fetchSite === 'cross-site' && fetchDest !== 'iframe') return false
+  // A framed load can legitimately be cross-site (the harness may be on
+  // 127.0.0.1 while the preview is on localhost), so it must name its parent.
+  if (fetchDest === 'iframe' || fetchSite === 'cross-site') return parents.includes(originOf(req.headers.referer))
+  if (fetchSite) return true
+  // Browsers that send no fetch metadata still send Origin (for any readable
+  // cross-origin request) or Referer. A page from anywhere else is rejected;
+  // a request with no provenance at all is local tooling (curl, a test, a
+  // health check), which cannot be told apart from a navigation and is allowed.
+  const declared = originOf(req.headers.origin) || originOf(req.headers.referer)
+  return declared === null || parents.includes(declared)
+}
 
 function normalizeBase(value) {
   const raw = String(value === undefined || value === null ? DEFAULT_BASE : value).trim()
   if (!raw || raw === '/') return '/'
   const withLead = raw.startsWith('/') ? raw : '/' + raw
   return withLead.endsWith('/') ? withLead : withLead + '/'
+}
+
+/** Process control is off unless a command is configured; when it is on, the
+ *  only working directory accepted is an existing absolute directory. */
+function existingDirectory(root) {
+  if (typeof root !== 'string' || !root || !isAbsolute(root)) return null
+  try {
+    const real = realpathSync(root)
+    return statSync(real).isDirectory() ? real : null
+  } catch (error) {
+    void error
+    return null
+  }
 }
 
 function resolveCommand(config) {
@@ -168,27 +246,21 @@ function titleOf(html) {
 }
 
 async function probePort(value, timeoutMs) {
-  try {
-    const res = await fetch(`http://127.0.0.1:${value}/`, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: { accept: 'text/html,application/xhtml+xml' },
-    })
-    const type = String(res.headers.get('content-type') || '')
-    if (res.status >= 400) return null
-    if (type && !type.includes('html')) return null
-    const html = type.includes('html') ? (await res.text()).slice(0, 120_000) : ''
-    return {
-      port: value,
-      url: `http://127.0.0.1:${value}/`,
-      href: res.url,
-      title: titleOf(html) || `127.0.0.1:${value}`,
-      status: res.status,
-    }
-  } catch (error) {
-    void error
-    return null
+  for (const hostname of ['127.0.0.1', '[::1]']) {
+    try {
+      const res = await fetch(`http://${hostname}:${value}/`, {
+        redirect: 'manual', signal: AbortSignal.timeout(timeoutMs),
+        headers: { accept: 'text/html,application/xhtml+xml' },
+      })
+      const type = String(res.headers.get('content-type') || '')
+      if (res.status >= 400 || (type && !type.includes('html'))) { await res.body?.cancel(); continue }
+      const html = type.includes('html') ? (await res.text()).slice(0, 120_000) : ''
+      if (!type) await res.body?.cancel()
+      return { port: value, url: `http://${hostname}:${value}/`, href: res.url,
+        title: titleOf(html) || `${hostname}:${value}`, status: res.status }
+    } catch { /* Try IPv6 when a dev server listens only on ::1. */ }
   }
+  return null
 }
 
 /** How to start something, read from the session workspace. */
@@ -236,21 +308,13 @@ export function apply(ctx, config = {}) {
   const runs = new Map()
 
   // ---- proxy ---------------------------------------------------------------
-  const proxyPrefix = String(config.proxyPrefix || DEFAULT_PROXY_PREFIX).replace(/\/+$/, '')
   const probeTimeoutMs = Number(config.detect?.probeTimeoutMs) || 900
   const detectCacheMs = Number(config.detect?.cacheMs) || 2000
   const extraPorts = Array.isArray(config.detect?.extraPorts) ? config.detect.extraPorts.map(Number) : []
   const staticPorts = config.detect?.staticPorts === false ? [] : COMMON_PORTS
   const detections = new Map()
-
-  ctx.effect(() =>
-    ctx.webServer.register({
-      kind: 'prefix',
-      path: proxyPrefix,
-      handler: (req, res) => proxyHttp(req, res, proxyPrefix),
-    })
-  )
-  ctx.effect(() => ctx.webServer.registerUpgrade({ path: WS_RELAY_PATH, handler: proxyUpgrade }))
+  const previews = new Map()
+  ctx.effect(() => () => { for (const promise of previews.values()) void promise.then((entry) => { entry.close() }).catch(() => {}) })
 
   const entryFor = (sid) => {
     const key = sid || '__root__'
@@ -295,17 +359,11 @@ export function apply(ctx, config = {}) {
   const start = async (sid, root) => {
     const entry = entryFor(sid)
     if (entry.handle && !entry.exited) return { ok: true, running: true, url: previewUrl, base, port, command }
-    if (!configuredCommand) return { ok: false, error: '未配置启动命令（可选功能）' }
-    if (!root) return { ok: false, error: '不知道工作区目录，无法启动 dev server' }
-    // A dev server may already be listening: adopt it instead of fighting over
-    // the port.
+    if (!configuredCommand) return { ok: false, code: 'noCommand', error: 'no start command configured' }
+    if (!root) return { ok: false, code: 'noRoot', error: 'workspace directory unknown' }
+    if (entry.starting) return { ok: false, code: 'starting', error: 'a service is already starting for this workspace' }
     if (await reachable(previewUrl)) {
-      entry.root = root
-      entry.handle = null
-      entry.exited = false
-      entry.starting = false
-      entry.log.push('· 复用已在运行的 dev server（' + previewUrl + '）')
-      return { ok: true, running: true, url: previewUrl, base, port, command, adopted: true, log: entry.log.slice(-20) }
+      return { ok: false, code: 'portBusy', error: 'that port is already in use and does not belong to this workspace' }
     }
     entry.root = root
     entry.log = []
@@ -324,7 +382,7 @@ export function apply(ctx, config = {}) {
     } catch (error) {
       entry.exited = true
       entry.starting = false
-      return { ok: false, error: '启动失败: ' + String((error && error.message) || error) }
+      return { ok: false, code: 'startFailed', detail: { error: String((error && error.message) || error) }, error: String((error && error.message) || error) }
     }
     entry.handle.done
       .then((out) => {
@@ -345,12 +403,14 @@ export function apply(ctx, config = {}) {
       }
       if (entry.exited) {
         entry.starting = false
-        return { ok: false, error: 'dev server 退出（' + (entry.exitCode === null ? '?' : entry.exitCode) + '）', log: entry.log.slice(-40) }
+        return { ok: false, code: 'exited', detail: { code: entry.exitCode === null ? '?' : entry.exitCode }, error: 'dev server exited', log: entry.log.slice(-40) }
       }
       await new Promise((resolve) => setTimeout(resolve, 700))
     }
     entry.starting = false
-    return { ok: false, error: '等待 dev server 就绪超时（' + Math.round(readyTimeoutMs / 1000) + 's）', log: entry.log.slice(-40) }
+    entry.handle?.terminate()
+    entry.exited = true
+    return { ok: false, code: 'readyTimeout', detail: { seconds: Math.round(readyTimeoutMs / 1000) }, error: 'timed out waiting for the dev server', log: entry.log.slice(-40) }
   }
 
   const stop = (sid) => {
@@ -363,19 +423,20 @@ export function apply(ctx, config = {}) {
     }
     entry.exited = true
     entry.handle = null
-    entry.log.push('· 已停止')
+    entry.log.push('· stopped')
     return { ok: true, running: false }
   }
 
   const detect = async (sid, args, req) => {
     const key = sid || '__root__'
     const cached = detections.get(key)
-    if (cached && Date.now() - cached.at < detectCacheMs) return cached.value
+    if (!args?.force && cached && Date.now() - cached.at < detectCacheMs) return cached.value
 
-    const selfPort = Number(String(req.headers.host || '').split(':')[1]) || 0
+    const selfPort = hostPort(req.headers.host)
+    const previewPorts = new Set((await Promise.all([...previews.values()])).map((entry) => Number(new URL(entry.origin).port)))
     const found = await listeningPorts()
     const candidates = [...new Set([...found, ...extraPorts, ...staticPorts])]
-      .filter((value) => value !== selfPort && value !== port)
+      .filter((value) => Number.isInteger(value) && value > 0 && value < 65536 && value !== selfPort && !previewPorts.has(value))
       .sort((a, b) => {
         const ai = COMMON_PORTS.indexOf(a)
         const bi = COMMON_PORTS.indexOf(b)
@@ -385,11 +446,14 @@ export function apply(ctx, config = {}) {
         return ai - bi
       })
 
-    const probed = await Promise.all(candidates.slice(0, 24).map((value) => probePort(value, probeTimeoutMs)))
+    const probed = []
+    for (let i = 0; i < candidates.length; i += 16) {
+      probed.push(...await Promise.all(candidates.slice(i, i + 16).map((value) => probePort(value, probeTimeoutMs))))
+    }
     const value = {
       ok: true,
       services: probed.filter(Boolean),
-      hint: await startupHint(args && args.root),
+      hint: await startupHint(existingDirectory(args && args.root)),
       scanned: candidates.length,
       at: Date.now(),
     }
@@ -398,8 +462,9 @@ export function apply(ctx, config = {}) {
   }
 
   const handler = async (req, res) => {
+    if (req.headers.origin && req.headers.origin !== requestOrigin(req)) { send(res, 403, { ok: false, code: 'originNotAllowed', error: 'origin not allowed' }); return }
     if (req.method !== 'POST') {
-      send(res, 405, { ok: false, error: 'method not allowed' })
+      send(res, 405, { ok: false, code: 'methodNotAllowed', error: 'method not allowed' })
       return
     }
     try {
@@ -418,15 +483,28 @@ export function apply(ctx, config = {}) {
           base,
           command: configuredCommand ? command : null,
           autoStart: configuredCommand,
-          proxyPrefix,
           root: entry.root,
           port,
           log: entry.log.slice(-60),
           exitCode: entry.exitCode,
         })
       }
+      if (method === 'preview') {
+        const target = new URL(args.url)
+        if (!isLocalTarget(target) || Number(target.port) === hostPort(req.headers.host)) return send(res, 400, { ok: false, code: 'notLocalTarget', error: 'local development services only; Harness itself cannot be previewed' })
+        const parentOrigin = requestOrigin(req)
+        const key = String(sid) + ':' + target.origin
+        if (!previews.has(key)) {
+          if (previews.size >= 24) return send(res, 429, { ok: false, code: 'tooManyPreviews', error: 'too many previews; restart the plugin to release the idle ones' })
+          const promise = createPreview(target, String(sid || ''), parentOrigin)
+          previews.set(key, promise)
+          promise.catch(() => previews.delete(key))
+        }
+        const entry = await previews.get(key)
+        return send(res, 200, { ok: true, url: entry.origin + target.pathname + target.search + target.hash, origin: entry.origin })
+      }
       if (method === 'detect') return send(res, 200, await detect(sid, args, req))
-      if (method === 'start') return send(res, 200, await start(sid, args.root))
+      if (method === 'start') return send(res, 200, await start(sid, existingDirectory(args.root)))
       if (method === 'stop') return send(res, 200, stop(sid))
       return send(res, 200, { ok: false, error: 'unknown method: ' + String(method) })
     } catch (error) {
@@ -447,7 +525,7 @@ export function apply(ctx, config = {}) {
     }
   })
   ctx.logger?.('dsh-annotate')?.info?.(
-    `dsh-annotate: loopback proxy at ${proxyPrefix}/<target>, ws relay at ${WS_RELAY_PATH}, api ${ROUTE}`
+    `dsh-annotate: loopback preview origins on demand, ws relay at ${WS_RELAY_PATH}, api ${ROUTE}`
   )
 }
 
@@ -455,29 +533,7 @@ export function apply(ctx, config = {}) {
 // Proxy
 // ---------------------------------------------------------------------------
 
-/** `/__dsh_anno/<enc>/<rest>?<search>` -> parts, or null when it is not ours. */
-function parseProxyPath(proxyPrefix, url) {
-  const raw = typeof url === 'string' && url.startsWith('/') ? url : `/${url || ''}`
-  const query = raw.indexOf('?')
-  const pathname = query === -1 ? raw : raw.slice(0, query)
-  const search = query === -1 ? '' : raw.slice(query)
-  if (!pathname.startsWith(proxyPrefix + '/')) return null
-  const rest = pathname.slice(proxyPrefix.length + 1)
-  const slash = rest.indexOf('/')
-  const enc = slash === -1 ? rest : rest.slice(0, slash)
-  const tail = slash === -1 ? '/' : rest.slice(slash)
-  let target
-  try {
-    target = new URL(decodeTarget(enc))
-    if (target.protocol !== 'http:' && target.protocol !== 'https:') return null
-  } catch (error) {
-    void error
-    return null
-  }
-  return { target, enc, tail, search, prefix: `${proxyPrefix}/${enc}` }
-}
-
-const cookiePrefix = (enc) => `anno_${String(enc).slice(0, 10)}_`
+const cookiePrefix = (enc) => `anno_${enc}_`
 
 /** Cookies the browser holds for the harness must never reach the proxied app,
  *  and the app's own cookies must not escape into the harness. */
@@ -494,6 +550,9 @@ function splitCookies(header, enc) {
   return forwarded.join('; ')
 }
 
+/** Namespace the app's cookies and re-scope them to the preview origin.
+ *  The preview is plain http on loopback, so `SameSite=None` requires `Secure`
+ *  and, in Chromium, partitioned storage. */
 function rewriteSetCookie(value, enc, target) {
   const prefix = cookiePrefix(enc)
   const parts = String(value).split(';').map((part) => part.trim())
@@ -502,98 +561,45 @@ function rewriteSetCookie(value, enc, target) {
   const name = eq === -1 ? first : first.slice(0, eq)
   const payload = eq === -1 ? '' : first.slice(eq + 1)
   const out = [`${prefix}${name}=${payload}`]
+  let cookiePath = '/'
   for (const attribute of parts.slice(1)) {
     const lower = attribute.toLowerCase()
     if (lower.startsWith('domain=')) continue
-    if (lower.startsWith('path=')) continue
-    // The proxy is plain http on loopback: a Secure cookie would be dropped.
-    if (lower === 'secure' && target.protocol === 'http:') continue
+    if (lower.startsWith('path=')) { cookiePath = attribute.slice(5).startsWith('/') ? attribute.slice(5) : '/'; continue }
+    if (lower.startsWith('samesite=') || lower === 'secure' || lower === 'partitioned') continue
     out.push(attribute)
   }
-  out.push(`Path=/__dsh_anno/${enc}/`)
+  out.push(`Path=${cookiePath}`)
+  out.push('SameSite=None', 'Secure', 'Partitioned')
   return out.join('; ')
 }
 
-function rewriteLocation(value, target, prefix) {
-  if (!value) return value
-  if (value.startsWith('/')) return prefix + value
-  try {
-    const parsed = new URL(value, target.origin)
-    if (parsed.origin === target.origin) return prefix + parsed.pathname + parsed.search + parsed.hash
-  } catch (error) {
-    void error
-  }
-  return value
-}
-
 /**
- * Root-absolute URLs (`/src/main.tsx`, `/@vite/client`) are the reason a
- * `<base>` is not enough: URL parsing of an absolute path replaces the whole
- * path, so the base's own path never applies. Dev servers emit these
- * everywhere, so the HTML's static URLs are rewritten here, and an import map
- * (below) covers the module graph that no rewriting can reach.
+ * The preview server serves the app at its own paths, so no document URL needs
+ * rewriting and no import map is needed. Injecting a second import map would in
+ * fact be harmful: a document may only have one, and ours would win over the
+ * app's. Only the annotation config, the shim and the overlay are added.
  */
-function rewriteRootUrls(html, prefix) {
-  const ATTR = /(\s(?:src|href|action|formaction|poster|data-src)\s*=\s*)(["'])(\/[^"'\s>]*)\2/gi
-  return html.replace(ATTR, (match, lead, quote, value) => {
-    if (value.startsWith('//') || value.startsWith(prefix)) return match
-    return `${lead}${quote}${prefix}${value.slice(1)}${quote}`
-  })
-}
-
-/** Prefix keys for every top-level path the document uses, so `import` and
- *  dynamic `import()` resolve inside the proxy too. */
-function importMapFor(html, prefix) {
-  // Dev servers reference these from inside modules, where no HTML rewriting
-  // can reach them.
-  const imports = {
-    '/node_modules/': `${prefix}node_modules/`,
-    '/@fs/': `${prefix}@fs/`,
-    '/@vite/': `${prefix}@vite/`,
-    '/@react-refresh': `${prefix}@react-refresh`,
-  }
-  const seen = /(?:src|href)\s*=\s*["'](\/[^"'\s>]*)["']/gi
-  let match
-  while ((match = seen.exec(html))) {
-    const path = match[1]
-    if (path.startsWith('//')) continue
-    const segment = path.slice(1).split('/')[0]
-    if (!segment) continue
-    if (path.slice(1).includes('/')) imports[`/${segment}/`] = `${prefix}${segment}/`
-    else imports[`/${segment}`] = `${prefix}${segment}`
-  }
-  const key = 'imports'
-  const payload = { [key]: imports }
-  return `<script type="importmap">${JSON.stringify(payload)}</script>`
-}
-
 function injectIntoHtml(html, config) {
-  const prefix = config.prefix
-  // Read the original document first: after rewriting, every URL is already
-  // prefixed and the import map would end up mapping the prefix onto itself.
-  const importMap = importMapFor(html, prefix)
-  const rewritten = rewriteRootUrls(html, prefix)
-  // The import map has to be in place before the first module script runs.
   const head =
-    `<script>window.__DSH_ANNO__=${JSON.stringify(config)};</script>` +
-    importMap +
-    `<script>${SHIM_SRC}</script>`
-  const withHead = /<head[^>]*>/i.test(rewritten)
-    ? rewritten.replace(/<head[^>]*>/i, (match) => match + head)
-    : /<html[^>]*>/i.test(rewritten)
-      ? rewritten.replace(/<html[^>]*>/i, (match) => match + head)
-      : head + rewritten
-  return withHead
+    `<script>window.__DSH_ANNO__=${JSON.stringify(config).replace(/</g, '\\u003c')};</script>` +
+    `<script>${SHIM_SRC}</script>` +
+    (config.isolated ? `<script>${OVERLAY_SRC}</script>` : '')
+  return /<head[^>]*>/i.test(html)
+    ? html.replace(/<head[^>]*>/i, (match) => match + head)
+    : /<html[^>]*>/i.test(html)
+      ? html.replace(/<html[^>]*>/i, (match) => match + head)
+      : head + html
 }
 
-function proxyHttp(req, res, proxyPrefix) {
-  const parsed = parseProxyPath(proxyPrefix, req.url)
-  if (!parsed) {
-    res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' })
-    res.end('dsh-annotate: malformed proxy path')
-    return
+function proxyHttp(req, res, preview) {
+  const incoming = new URL(req.url, 'http://localhost')
+  const { target, enc, tail, search } = {
+    target: preview.target,
+    enc: encodeTarget(preview.target.origin),
+    tail: incoming.pathname,
+    search: incoming.search,
   }
-  const { target, enc, tail, search, prefix } = parsed
   const origin = target.origin
 
   const headers = {}
@@ -611,7 +617,8 @@ function proxyHttp(req, res, proxyPrefix) {
       continue
     }
     if (lower === 'referer') {
-      headers.referer = origin + String(value).replace(prefix, '')
+      // The preview keeps the app's own paths, so only the origin changes.
+      try { const ref = new URL(value); headers.referer = origin + ref.pathname + ref.search } catch (error) { void error }
       continue
     }
     headers[key] = value
@@ -619,10 +626,10 @@ function proxyHttp(req, res, proxyPrefix) {
   headers.host = target.host
   headers['accept-encoding'] = 'identity'
 
-  const upstream = http.request(
+  const upstream = (target.protocol === 'https:' ? https : http).request(
     {
       protocol: target.protocol,
-      hostname: target.hostname,
+      hostname: target.hostname.replace(/^\[|\]$/g, ''),
       port: target.port || (target.protocol === 'https:' ? 443 : 80),
       method: req.method,
       path: tail + search,
@@ -641,7 +648,8 @@ function proxyHttp(req, res, proxyPrefix) {
           continue
         }
         if (lower === 'location' && typeof value === 'string') {
-          out.location = rewriteLocation(value, target, prefix)
+          // Paths are preserved, so a same-origin redirect needs no rewrite.
+          out.location = value
           continue
         }
         out[key] = value
@@ -653,13 +661,13 @@ function proxyHttp(req, res, proxyPrefix) {
         return
       }
 
-      // HTML: give it a base and the shim before any app script runs.
+      // HTML: inject config, shim and overlay before any app script runs.
       const chunks = []
       upstreamRes.on('data', (chunk) => chunks.push(chunk))
       upstreamRes.on('end', () => {
         const html = Buffer.concat(chunks).toString('utf8')
         const body = Buffer.from(
-          injectIntoHtml(html, { upstream: origin, prefix: `${prefix}/`, relay: WS_RELAY_PATH, enc }),
+          injectIntoHtml(html, { upstream: origin, prefix: '/', relay: WS_RELAY_PATH, enc, isolated: true, parentOrigin: preview.parentOrigin, session: preview.sid }),
           'utf8'
         )
         out['content-length'] = String(body.length)
@@ -670,10 +678,12 @@ function proxyHttp(req, res, proxyPrefix) {
     }
   )
 
+  upstream.setTimeout(15000, () => upstream.destroy(new Error('connection timed out')))
   upstream.on('error', (error) => {
     if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/html; charset=utf-8' })
     res.end(
-      `<body style="font:14px system-ui;padding:24px;color:#666"><h3>无法连接 ${origin}</h3><p>${error.message}</p></body>`
+      `<body style="font:12px ui-monospace,SFMono-Regular,Menlo,monospace;padding:20px;color:#666">${escapeHtml(error.message)}` +
+      `<script>parent.postMessage({source:'dsh-annotate-page',type:'error',code:'upstreamUnreachable'},${JSON.stringify(preview.parentOrigin)})</script></body>`
     )
   })
   res.on('close', () => {
@@ -689,6 +699,7 @@ function proxyUpgrade(req, socket, head) {
   let target
   try {
     target = new URL(decodeTarget(enc))
+    if (!isLocalTarget(target)) throw new Error('local targets only')
   } catch (error) {
     void error
     socket.destroy()
@@ -698,7 +709,7 @@ function proxyUpgrade(req, socket, head) {
   const headers = {}
   for (const [key, value] of Object.entries(req.headers)) {
     const lower = key.toLowerCase()
-    if (lower === 'host' || HOP_BY_HOP.has(lower)) continue
+    if (lower === 'host' || lower === 'authorization' || HOP_BY_HOP.has(lower)) continue
     if (lower === 'cookie') {
       const forwarded = splitCookies(value, enc)
       if (forwarded) headers.cookie = forwarded
@@ -711,13 +722,15 @@ function proxyUpgrade(req, socket, head) {
     headers[key] = value
   }
   headers.host = target.host
+  headers.connection = 'Upgrade'
+  headers.upgrade = 'websocket'
 
-  const upstream = http.request({
+  const upstream = (target.protocol === 'https:' ? https : http).request({
     protocol: target.protocol,
-    hostname: target.hostname,
+    hostname: target.hostname.replace(/^\[|\]$/g, ''),
     port: target.port || (target.protocol === 'https:' ? 443 : 80),
     method: req.method,
-    path: targetPath,
+    path: targetPath.startsWith('/') ? targetPath : new URL(targetPath).pathname + new URL(targetPath).search,
     headers,
   })
   upstream.on('upgrade', (upstreamRes, upstreamSocket, upstreamHead) => {
@@ -727,6 +740,7 @@ function proxyUpgrade(req, socket, head) {
       if (Array.isArray(value)) for (const one of value) lines.push(`${key}: ${one}`)
       else lines.push(`${key}: ${value}`)
     }
+    lines.push('connection: Upgrade')
     socket.write(lines.join('\r\n') + '\r\n\r\n')
     if (upstreamHead && upstreamHead.length) socket.write(upstreamHead)
     if (head && head.length) upstreamSocket.write(head)
@@ -749,4 +763,30 @@ function proxyUpgrade(req, socket, head) {
   })
   upstream.on('error', () => socket.destroy())
   upstream.end()
+}
+
+/** A dedicated loopback origin preserves app paths and separates app DOM and
+ * storage from Harness. Nothing outside loopback may be used as an upstream.
+ * Servers are keyed by session + app and disposed with the plugin. */
+async function createPreview(target, sid, parentOrigin) {
+  const hostname = new URL(parentOrigin).hostname === 'localhost' ? '127.0.0.1' : 'localhost'
+  const preview = { target: new URL(target.origin), sid, parentOrigin }
+  const originOfPreview = () => `http://${hostname}:${server.address().port}`
+  const server = http.createServer((req, res) => {
+    // Only the preview's own hostname is served, so a DNS-rebinding page cannot
+    // reach the app through this origin.
+    if (req.headers.host !== `${hostname}:${server.address().port}`) { res.writeHead(403); res.end(); return }
+    if (!allowedPreviewRequest(req, parentOrigin, originOfPreview())) { res.writeHead(403); res.end(); return }
+    proxyHttp(req, res, preview)
+  })
+  const sockets = new Set()
+  server.on('connection', (socket) => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)) })
+  server.on('upgrade', (req, socket, head) => {
+    if (req.headers.origin !== originOfPreview()) { socket.destroy(); return }
+    const path = req.url
+    req.url = WS_RELAY_PATH + '?to=' + encodeTarget(target.origin) + '&path=' + encodeURIComponent(path)
+    proxyUpgrade(req, socket, head)
+  })
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, hostname, resolve) })
+  return { server, origin: `http://${hostname}:${server.address().port}`, close() { for (const socket of sockets) socket.destroy(); server.close() } }
 }

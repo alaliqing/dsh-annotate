@@ -1,16 +1,15 @@
 /**
  * dsh-annotate — page shim.
  *
- * Injected into every proxied HTML document, before any app script. The proxy
- * already gives the page a `<base>` (so relative and root-absolute URLs stay
- * inside the proxy); this covers what `<base>` cannot:
+ * Injected into every previewed HTML document, before any app script. The
+ * preview server serves the app at its own paths, so relative and root-absolute
+ * URLs already stay inside it; this shim covers what preserving paths cannot:
  *
  *  - URLs built from the page's own origin (`fetch(location.origin + '/api')`),
- *    which would otherwise hit the harness root;
+ *    which are already correct here and must not be rewritten a second time;
  *  - absolute URLs pointing at the real upstream origin, which would leave the
- *    proxy and become cross-origin (and therefore unannotatable);
- *  - WebSocket / EventSource, routed through one relay path because the harness
- *    router only takes exact upgrade paths;
+ *    preview origin and become cross-origin (and therefore unannotatable);
+ *  - WebSocket / EventSource, relayed to the target the preview represents;
  *  - SPA navigation, reported to the panel so the address bar follows.
  *
  * Everything is wrapped defensively: a broken shim must never break the app.
@@ -18,8 +17,9 @@
 ;(function () {
   var cfg = window.__DSH_ANNO__
   if (!cfg || !cfg.upstream) return
+  window.__DSH_ANNO_SESSION__ = cfg.session || 'standalone'
 
-  var PROXIED = location.origin + cfg.prefix // e.g. https://host/__dsh_anno/<enc>/
+  var PROXIED = location.origin + cfg.prefix // '/' in the preview origin
   var withSlash = cfg.prefix.slice(-1) === '/' ? cfg.prefix : cfg.prefix + '/'
 
   function proxied(url) {
@@ -105,6 +105,14 @@
     var OriginalWebSocket = window.WebSocket
     var relayFor = function (url) {
       var absolute = toAbsolute(url)
+      if (cfg.isolated) {
+        var socketUrl = new URL(absolute)
+        var httpOrigin = socketUrl.origin.replace(/^ws/, 'http')
+        if (httpOrigin === cfg.upstream || httpOrigin === location.origin) {
+          return location.origin.replace(/^http/, 'ws') + socketUrl.pathname + socketUrl.search
+        }
+        return url
+      }
       var target = ''
       if (absolute.indexOf(location.origin + withSlash) === 0) {
         var rest = absolute.slice((location.origin + withSlash).length)
@@ -137,6 +145,22 @@
     window.WebSocket = PatchedWebSocket
   }
 
+  if (cfg.isolated) {
+    var cookiePrefix = 'anno_' + cfg.enc + '_'
+    var cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')
+    if (cookieDescriptor && cookieDescriptor.get && cookieDescriptor.set) {
+      Object.defineProperty(document, 'cookie', {
+        configurable: true,
+        get: function () {
+          return cookieDescriptor.get.call(document).split(';').map(function (s) { return s.trim() })
+            .filter(function (s) { return s.indexOf(cookiePrefix) === 0 })
+            .map(function (s) { return s.slice(cookiePrefix.length) }).join('; ')
+        },
+        set: function (value) { cookieDescriptor.set.call(document, cookiePrefix + String(value).replace(/;\s*domain=[^;]*/ig, '') + '; SameSite=None; Secure; Partitioned') }
+      })
+    }
+  }
+
   // ---- navigation reporting ----------------------------------------------
   function upstreamHref() {
     var href = location.href
@@ -146,8 +170,9 @@
   }
 
   function report() {
+    if (!cfg.parentOrigin) return
     try {
-      window.parent.postMessage({ source: 'dsh-annotate-page', type: 'navigated', url: upstreamHref() }, '*')
+      window.parent.postMessage({ source: 'dsh-annotate-page', type: 'navigated', url: upstreamHref() }, cfg.parentOrigin)
     } catch (error) {
       void error
     }

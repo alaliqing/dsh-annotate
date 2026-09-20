@@ -13,7 +13,7 @@
  * the bridge needs this harness restarted (Ctrl-C, run again).
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -56,7 +56,7 @@ function seedProfile() {
     }
     if (existsSync(join(template, '.dsh-module-fallback'))) {
       rmSync(join(profileDir, '.dsh-module-fallback'), { recursive: true, force: true })
-      spawnSync('cp', ['-R', join(template, '.dsh-module-fallback'), join(profileDir, '.dsh-module-fallback')])
+      cpSync(join(template, '.dsh-module-fallback'), join(profileDir, '.dsh-module-fallback'), { recursive: true })
     }
   } else {
     writeFileSync(join(profileDir, 'cordis.yml'), '# dsh profile root — patches compose the tree\n[]\n')
@@ -72,7 +72,6 @@ function seedProfile() {
         dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'], patchReload: 'live' } },
         dependencies: {
           'dsh-annotate': `link:${join(repo, 'packages', 'dsh-annotate')}`,
-          'dsh-app-bridge': `link:${join(repo, 'packages', 'dsh-app-bridge')}`,
         },
       },
       null,
@@ -90,9 +89,9 @@ function seedProfile() {
     compressionLevel: 1
     compressionThresholdBytes: 1024
 - insert:
-    # Same-origin bridge: the fixture appears on the harness origin under ${prefix}
     # Zero configuration on purpose: the tab discovers whatever is running and
-    # opens it through the proxy. This mirrors what a user installs.
+    # opens it in its own loopback preview origin. This mirrors what a user
+    # installs; dsh-app-bridge is not involved.
     - name: dsh-annotate
 `
   writeFileSync(join(profileDir, 'cordis.patch.yml'), patch)
@@ -139,11 +138,24 @@ const forward = (chunk) => {
     console.log('  open a conversation, press ⌘⇧B — the fixture is listed, click it')
     console.log('  client-half edits: npm run build then refresh · host-half: restart this script')
     console.log('─'.repeat(72) + '\n')
-    if (wantOpen) spawn('open', [url], { stdio: 'ignore', detached: true }).unref()
+    if (wantOpen) openInBrowser(url)
   }
 }
 child.stdout.on('data', forward)
 child.stderr.on('data', forward)
+
+/** `--open` is a convenience, not a feature: fail quietly where it cannot work. */
+function openInBrowser(url) {
+  const [command, args] =
+    process.platform === 'darwin' ? ['open', [url]]
+      : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
+        : ['xdg-open', [url]]
+  try {
+    spawn(command, args, { stdio: 'ignore', detached: true }).unref()
+  } catch (error) {
+    console.log(`· could not open a browser (${String(error.message)}): ${url}`)
+  }
+}
 
 const shutdown = (signal) => {
   console.log(`\n· ${signal} — stopping harness and fixture`)

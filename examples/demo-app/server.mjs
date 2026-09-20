@@ -2,16 +2,18 @@
  * Fixture dev server: the project the annotation plugin previews while you work
  * on the plugin itself.
  *
- * Deliberately dependency-free and prefix-aware, because the two things the
- * bridge + overlay care about are exactly those: everything must live under one
- * base prefix, and the server must behave like a real dev server (streaming,
- * POSTs, revalidation) so the bridge is exercised for real.
+ * Deliberately dependency-free, and prefix-aware so it can also exercise
+ * `dsh-app-bridge` (`--base /app/`). The default preview path does not need the
+ * prefix: it serves the app at its own paths on an isolated loopback origin.
+ * The server behaves like a real dev server (streaming, POSTs, revalidation,
+ * a nested scroll container, an SPA route) so the plugin is exercised for real.
  *
  *   node server.mjs --port 5180 --base /app/
  */
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
+import { realpathSync } from 'node:fs'
 import { extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
@@ -80,12 +82,17 @@ const server = createServer(async (req, res) => {
   }
 
   const relative = path === '/' || path === '' ? 'index.html' : path.replace(/^\/+/, '')
-  const target = join(here, 'public', normalize(relative).replace(/^(\.\.[/\\])+/, ''))
-  if (!target.startsWith(join(here, 'public') + sep) && target !== join(here, 'public', 'index.html')) {
-    return json(res, 403, { error: 'forbidden' })
-  }
+  const root = join(here, 'public')
+  const target = join(root, normalize(relative).replace(/^(\.\.[/\\])+/, ''))
   try {
-    const body = await readFile(target)
+    // Resolve symlinks before the containment check: a link inside public/ must
+    // not escape the root, which a plain prefix test cannot see.
+    const realRoot = realpathSync(root)
+    const real = realpathSync(target)
+    if (real !== join(realRoot, 'index.html') && !real.startsWith(realRoot + sep)) {
+      return json(res, 403, { error: 'forbidden' })
+    }
+    const body = await readFile(real)
     res.writeHead(200, { 'content-type': TYPES[extname(target)] ?? 'application/octet-stream', 'cache-control': 'no-store' })
     res.end(body)
   } catch {

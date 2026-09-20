@@ -2,18 +2,26 @@
  * dsh-app-bridge — Host half.
  *
  * Reverse-proxies a local dev server (Vite / Next / anything HTTP) onto the
- * harness origin under a path prefix, including WebSocket upgrades.
+ * harness origin under a fixed path prefix, including WebSocket upgrades.
  *
- * Why this exists: annotating elements inside an iframe preview requires the
- * previewed document to be Same-Origin with the harness page — the DOM of a
- * cross-origin frame is unreadable, no matter which overlay you inject. A dev
- * server on another port (`localhost:5173`) is therefore un-annotatable, while
- * `http://127.0.0.1:<harness-port>/app/` is not. This bridge is what makes a
- * dev server Same-Origin.
+ * Why this exists: some apps can only be previewed from the harness origin.
+ * A dev server on its own port (`localhost:5173`) is cross-origin with the
+ * harness, so the harness page cannot read the framed document. Mounting it at
+ * `http://127.0.0.1:<harness-port>/app/` removes that boundary for apps you
+ * already trust. The default `dsh-annotate` preview avoids the same-origin
+ * approach altogether and uses an isolated loopback origin instead; use this
+ * bridge only for a fixed mount that genuinely needs the harness origin.
  *
- * Paired with the dev server running under the same prefix
- * (`vite --base=/app/`), so every asset, HMR socket and API path stays inside
- * the bridge and never collides with the harness' own `/api/*` surface.
+ * This package is a proxy and nothing more: it injects no script. Pair it with
+ * a dev server running under the same prefix (`vite --base=/app/`), so every
+ * asset, HMR socket and API path stays inside the bridge and never collides with
+ * the harness' own `/api/*` surface.
+ *
+ * Because the bridged app shares the harness origin, the harness' own cookies
+ * and `Authorization` header would be visible to it (and its `Set-Cookie` would
+ * land on the harness origin). Credentials are stripped in both directions by
+ * default; set `forwardCredentials: true` only for a dev server you trust to
+ * hold your harness session.
  */
 
 import http from 'node:http'
@@ -33,11 +41,18 @@ const HOP_BY_HOP = new Set([
   'transfer-encoding',
 ])
 
-function buildHeaders(headers, authority, keepUpgradeHeaders) {
+/** Only loopback may be bridged, so a mount can never expose a remote host. */
+function isLoopbackTarget(url) {
+  return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password &&
+    ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+}
+
+function buildHeaders(headers, authority, keepUpgradeHeaders, forwardCredentials) {
   const out = {}
   for (const [key, value] of Object.entries(headers)) {
     const lower = key.toLowerCase()
     if (lower === 'host') continue
+    if (!forwardCredentials && (lower === 'cookie' || lower === 'authorization')) continue
     if (!keepUpgradeHeaders && HOP_BY_HOP.has(lower)) continue
     out[key] = value
   }
@@ -46,10 +61,12 @@ function buildHeaders(headers, authority, keepUpgradeHeaders) {
   return out
 }
 
-function buildResponseHeaders(headers) {
+function buildResponseHeaders(headers, forwardCredentials) {
   const out = {}
   for (const [key, value] of Object.entries(headers)) {
-    if (HOP_BY_HOP.has(key.toLowerCase())) continue
+    const lower = key.toLowerCase()
+    if (HOP_BY_HOP.has(lower)) continue
+    if (!forwardCredentials && lower === 'set-cookie') continue
     if (value === undefined) continue
     out[key] = value
   }
@@ -85,8 +102,12 @@ function normalizePrefix(value) {
 
 export function apply(ctx, config = {}) {
   const target = new URL(config.target ?? 'http://127.0.0.1:5173')
+  if (!isLoopbackTarget(target)) {
+    throw new Error(`dsh-app-bridge: target must be a loopback http(s) URL, got ${target.href}`)
+  }
   const prefix = normalizePrefix(config.prefix)
   const authority = target.host
+  const forwardCredentials = config.forwardCredentials === true
   // A base-prefixed dev server puts its HMR socket on `<base>/` (Vite derives
   // the socket path from `base`), and the webServer API only takes exact
   // upgrade paths, so both spellings are registered.
@@ -105,10 +126,10 @@ export function apply(ctx, config = {}) {
         port: target.port || 80,
         method: req.method,
         path: upstreamPath(prefix, req.url),
-        headers: buildHeaders(req.headers, authority, false),
+        headers: buildHeaders(req.headers, authority, false, forwardCredentials),
       },
       (upstreamRes) => {
-        res.writeHead(upstreamRes.statusCode ?? 502, buildResponseHeaders(upstreamRes.headers))
+        res.writeHead(upstreamRes.statusCode ?? 502, buildResponseHeaders(upstreamRes.headers, forwardCredentials))
         // Piped, never buffered: the app streams SSE, and buffering would hold
         // an answer until it finished.
         upstreamRes.pipe(res)
@@ -133,7 +154,7 @@ export function apply(ctx, config = {}) {
       port: target.port || 80,
       method: req.method,
       path: upstreamPath(prefix, req.url),
-      headers: buildHeaders(req.headers, authority, true),
+      headers: buildHeaders(req.headers, authority, true, forwardCredentials),
     })
     upstream.on('upgrade', (upstreamRes, upstreamSocket, upstreamHead) => {
       socket.write(
