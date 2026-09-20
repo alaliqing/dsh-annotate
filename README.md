@@ -134,6 +134,11 @@ origin per session and app**:
 - Preview servers and their sockets close when the plugin is disposed. At most 24
   session/app previews are retained per boot.
 
+An earlier design proxied the app under a path prefix on the harness origin. It
+was removed outright rather than kept behind an option: it isolated nothing, and
+it put an unauthenticated WebSocket tunnel to any loopback port on the harness
+origin.
+
 This is a local development preview, not a general-purpose browser:
 
 - Origin-sensitive apps may need app-specific setup or a normal browser: OAuth
@@ -236,15 +241,13 @@ accepted sends, attaching, the language switch, and narrow layouts. No model is
 called. Screenshots are written to the ignored `tests/shots/`.
 
 For a live harness, `node scripts/dev.mjs` seeds a throwaway profile and runs the
-bundled fixture against it. See [DEVELOPING.md](DEVELOPING.md) and
-[CONTRIBUTING.md](CONTRIBUTING.md).
+bundled fixture against it. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 | Path | What it is |
 | --- | --- |
 | `packages/dsh-annotate/` | The plugin: host half, client half, injected shim and overlay |
 | `packages/dsh-app-bridge/` | The fixed-mount reverse proxy |
 | `examples/demo-app/` | Dependency-free fixture app used by the dev loop and tests |
-| `docs/` | Design notes, including the [reliability plan](docs/PLAN-reliability-and-ux.md) |
 
 ## Contributing
 
