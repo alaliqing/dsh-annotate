@@ -116,6 +116,20 @@ const PANEL_CSS = `
 .dsa-empty code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; padding:2px 5px; border-radius:4px;
   background:color-mix(in srgb,${MARKER} 14%,transparent); color:${MARKER} }
 
+/* Annotations live in a collapsible corner card: the page keeps its space. */
+.dsa-ovlist { position:absolute; top:8px; right:8px; z-index:5; display:flex; flex-direction:column; align-items:flex-end;
+  width:min(304px, calc(100% - 16px)); pointer-events:auto }
+.dsa-ovhead { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px; cursor:pointer;
+  border-radius:13px; border:1px solid color-mix(in srgb,${MARKER} 42%,transparent);
+  background:color-mix(in srgb,${MARKER} 20%,var(--dsw-alias-bg-layer-1,#1b1f26)); color:var(--dsw-alias-label-primary,#e8eaed);
+  font:600 11.5px/1 ui-sans-serif,system-ui,sans-serif; box-shadow:0 4px 14px rgba(0,0,0,.22) }
+.dsa-ovhead b { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:${MARKER} }
+.dsa-ovhead svg { width:14px; height:14px; opacity:.75; transition:transform .15s ease }
+.dsa-ovlist[data-open="true"] .dsa-ovhead svg { transform:rotate(180deg) }
+.dsa-ovitems { margin-top:6px; width:100%; max-height:min(52vh,360px); overflow:auto; border-radius:10px;
+  border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 12%,transparent);
+  background:color-mix(in srgb,var(--dsw-alias-bg-layer-1,#1b1f26) 94%,transparent); box-shadow:0 10px 28px rgba(0,0,0,.28) }
+.dsa-ovitems .dsa-item:last-child { border-bottom:0 }
 .dsa-list { flex:none; max-height:40%; min-height:0; overflow:auto;
   border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent) }
 /* No annotations, no row: the hint lives behind the ? instead. */
@@ -176,6 +190,7 @@ const ICONS = {
   locate: 'M12 2v3m0 14v3M2 12h3m14 0h3M12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2z',
   trash: 'M6 7h12l-1 13H7zM9 4h6l1 2H8z',
   external: 'M14 4h6v6h-2V7.4l-7.3 7.3-1.4-1.4L16.6 6H14zM5 6h5v2H7v9h9v-3h2v5H5z',
+  chevron: 'M7.4 10 12 14.6 16.6 10',
   help: 'M12 4a4 4 0 0 1 4 4c0 2-1.3 2.9-2.3 3.6-.7.5-1 .9-1 1.6v.4h-2v-.6c0-1.5.7-2.3 1.8-3.1.8-.5 1.4-1 1.4-1.9A1.9 1.9 0 0 0 12 6a1.9 1.9 0 0 0-2 1.8H8A3.9 3.9 0 0 1 12 4zm0 12.1a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z',
 }
 
@@ -212,12 +227,6 @@ function payloadOf(ann, index) {
     (ann.placement ? ' · 视口 ' + ann.placement.zone + '（' + ann.placement.x + '%W × ' + ann.placement.y + '%H）' : ''))
   const styles = styleSummary(ann.styles)
   if (styles) lines.push('   当前样式: ' + styles)
-  if (ann.styleEdits) {
-    const edits = Object.keys(ann.styleEdits)
-      .map((key) => key + ' ' + (ann.styleEdits[key].from || '(未设置)') + ' → ' + ann.styleEdits[key].to)
-      .join('; ')
-    if (edits) lines.push('   样式改动（已在页面上预览）: ' + edits)
-  }
   if (ann.text) lines.push('   文本: ' + ann.text)
   lines.push('   批注: ' + ann.comment)
   return lines.join('\n')
@@ -301,6 +310,7 @@ function apply(ctx) {
           page: '',
           mode: 'idle',
           helpOpen: false,
+          listOpen: false,
           sending: false,
           cors: false,
           pending: [],
@@ -789,9 +799,8 @@ function apply(ctx) {
                 React.createElement('p', null, '点下面「标记」，然后点页面里的元素写批注，Enter 保存。'),
                 React.createElement('p', null, 'Esc 退出标注状态（换页面、滚动都不受影响，随时再点「标记」继续）。'),
                 React.createElement('p', null, '⌘/Ctrl+点击元素 = 写完立即发送。'),
-                React.createElement('b', null, '改样式'),
-                React.createElement('p', null, '批注卡片里的「样式」可直接调字号/间距/颜色，改动在页面上实时生效。'),
-                React.createElement('b', null, '发送'),
+                React.createElement('b', null, '批注列表与发送'),
+                React.createElement('p', null, '右上角的胶囊是批注列表，点开可逐条定位或删除。'),
                 React.createElement('p', null, '「发送」直接把标注发到对话里；⌥/Alt+点击「发送」则只填入输入框，方便你先补充几句。')
               )
             : null
@@ -831,7 +840,57 @@ function apply(ctx) {
               React.createElement('p', null, '跨源页面无法标注。回到列表选一个本地服务（本地服务会自动经同源代理打开）。')
             )
           : null,
-        React.createElement('div', { className: 'dsa-stagefoot' }, React.createElement('i'), React.createElement('span', null, state.url))
+        React.createElement('div', { className: 'dsa-stagefoot' }, React.createElement('i'), React.createElement('span', null, state.url)),
+        annotations.length
+          ? React.createElement(
+              'div',
+              { className: 'dsa-ovlist', 'data-open': state.listOpen ? 'true' : 'false' },
+              React.createElement(
+                'button',
+                {
+                  className: 'dsa-ovhead',
+                  type: 'button',
+                  title: state.listOpen ? '收起批注列表' : '展开批注列表',
+                  onClick: () => panel.model.set({ listOpen: !state.listOpen }),
+                },
+                React.createElement('b', null, String(annotations.length)),
+                React.createElement('span', null, '条批注'),
+                React.createElement(Icon, { name: 'chevron' })
+              ),
+              state.listOpen
+                ? React.createElement(
+                    'div',
+                    { className: 'dsa-ovitems' },
+                    annotations.map((ann, index) =>
+                      React.createElement(
+                        'div',
+                        { className: 'dsa-item', key: ann.id },
+                        React.createElement('div', { className: 'dsa-idx' }, String(index + 1)),
+                        React.createElement(
+                          'div',
+                          { className: 'dsa-body' },
+                          React.createElement(
+                            'div',
+                            { className: 'dsa-meta' },
+                            React.createElement('b', null, ann.tag + (ann.classes && ann.classes.length ? '.' + ann.classes[0] : '')),
+                            ann.component ? React.createElement('span', null, ann.component) : null,
+                            React.createElement('span', null, ann.rect.w + '×' + ann.rect.h)
+                          ),
+                          React.createElement('div', { className: 'dsa-sel' }, ann.selector),
+                          React.createElement('div', { className: 'dsa-comment' }, ann.comment)
+                        ),
+                        React.createElement(
+                          'div',
+                          { className: 'dsa-acts' },
+                          React.createElement('button', { className: 'dsa-mini', type: 'button', title: '在预览里定位', onClick: () => notify('focus', { id: ann.id }) }, React.createElement(Icon, { name: 'locate' })),
+                          React.createElement('button', { className: 'dsa-mini', type: 'button', 'data-danger': 'true', title: '删除这条标注', onClick: () => notify('remove', { id: ann.id }) }, React.createElement(Icon, { name: 'trash' }))
+                        )
+                      )
+                    )
+                  )
+                : null
+            )
+          : null
       ),
       React.createElement(
         'div',
@@ -861,38 +920,6 @@ function apply(ctx) {
           state.sending ? '发送中…' : '发送'
         )
       ),
-      React.createElement(
-        'div',
-        { className: 'dsa-list' },
-        annotations.length === 0
-          ? null
-          : annotations.map((ann, index) =>
-              React.createElement(
-                'div',
-                { className: 'dsa-item', key: ann.id },
-                React.createElement('div', { className: 'dsa-idx' }, String(index + 1)),
-                React.createElement(
-                  'div',
-                  { className: 'dsa-body' },
-                  React.createElement(
-                    'div',
-                    { className: 'dsa-meta' },
-                    React.createElement('b', null, ann.tag + (ann.classes && ann.classes.length ? '.' + ann.classes[0] : '')),
-                    ann.component ? React.createElement('span', null, ann.component) : null,
-                    React.createElement('span', null, ann.rect.w + '×' + ann.rect.h)
-                  ),
-                  React.createElement('div', { className: 'dsa-sel' }, ann.selector),
-                  React.createElement('div', { className: 'dsa-comment' }, ann.comment)
-                ),
-                React.createElement(
-                  'div',
-                  { className: 'dsa-acts' },
-                  React.createElement('button', { className: 'dsa-mini', type: 'button', title: '在预览里定位', onClick: () => notify('focus', { id: ann.id }) }, React.createElement(Icon, { name: 'locate' })),
-                  React.createElement('button', { className: 'dsa-mini', type: 'button', 'data-danger': 'true', title: '删除这条标注', onClick: () => notify('remove', { id: ann.id }) }, React.createElement(Icon, { name: 'trash' }))
-                )
-              )
-            )
-      )
     )
   }
 

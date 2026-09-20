@@ -157,20 +157,22 @@ mount a base-prefixed dev server at a fixed path instead —
 ```
 ←  →  ⟳   [ address ]                      ☰   ?      ← navigation, list, help
 ┌───────────────────────────────────────────────────┐
-│                  the page you picked              │
-├───────────────────────────────────────────────────┤
-│ ① button.idd-… · 这个框和左边不一样高              │  annotations, newest last
+│                                   ① 2 条批注 ▾     │  collapsible corner card
+│                  the page you picked               │
 ├───────────────────────────────────────────────────┤
 │  ✎ 标记    ↗ 打开                    2 条    [发送] │  actions at the bottom
 └───────────────────────────────────────────────────┘
 ```
 
 - **标记** turns element picking on; click an element in the page, write the note,
-  <kbd>Enter</kbd> saves it. **<kbd>Esc</kbd> leaves picking** — browse, scroll or
-  follow a link, then press 标记 again to keep annotating.
+  <kbd>Enter</kbd> saves it **and stays in marking mode**, so the next element is
+  one click away. **<kbd>Esc</kbd> leaves picking** — browse, scroll or follow a
+  link, then press 标记 again to keep annotating.
 - <kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click an element to write and send in one step.
-- **「样式」** in the card edits font size, padding, gap, radius and colours, live
-  on the page; the edits travel with the annotation.
+- Pins (`1`, `2`, …) are anchored to their element's document position, so they
+  travel with the page when it scrolls and re-anchor on resize.
+- The **corner card** (top right) holds the list: collapsed to a count, it opens
+  for per-annotation locate/delete — it never takes a row away from the page.
 - **发送** delivers the collected annotations straight to the conversation.
   <kbd>⌥</kbd>/<kbd>Alt</kbd>+click keeps them in the composer instead, if you want
   to add your own words first. If the harness refuses the automatic send (for
@@ -183,7 +185,8 @@ mount a base-prefixed dev server at a fixed path instead —
 Enough to find the element without a screenshot: selector path **and how many
 elements it matches**, `role` / `aria-label` / `alt` / `name` / `data-testid`,
 the **component chain**, size, position and viewport placement, computed styles,
-the visible text, and any live style edits.
+and the visible text. There is no style editing: the note is the deliverable, and
+the computed styles are read-only evidence for whoever fixes it.
 
 ```
 #1 button.idd-visual-select-trigger  组件:VisualSelect

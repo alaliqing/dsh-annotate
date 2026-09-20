@@ -27,7 +27,7 @@ body {
 }
 .tabs button[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 .ghost { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; font: inherit; cursor: pointer; }
-main { max-width: 720px; margin: 0 auto; padding: 26px 22px 80px; }
+main { max-width: 720px; margin: 0 auto; padding: 26px 22px 80px; min-height: 190vh; }
 h1 { margin: 0 0 16px; font-size: 27px; letter-spacing: -0.03em; }
 h1 small { color: var(--muted); font-size: 14px; font-weight: 500; }
 .cards { display: grid; gap: 12px; }
