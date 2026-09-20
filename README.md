@@ -10,6 +10,76 @@ Two Cordis plugins:
 | [`dsh-annotate`](packages/dsh-annotate) | Right-sidebar review tab: same-origin preview, element picking, comments, live style tweaks, one structured block into the composer. Starts and stops the dev server itself. |
 | [`dsh-app-bridge`](packages/dsh-app-bridge) | Same-origin bridge: reverse-proxies a local dev server (all methods + WebSocket) onto the harness origin under `/app/`. |
 
+## Quickstart
+
+### A. Just try it (no project of your own needed)
+
+```bash
+git clone <this-repo> && cd dsh-annotate
+node scripts/dev.mjs
+```
+
+The script creates its own DSH profile, boots the harness and prints a URL like
+`http://127.0.0.1:3099/?token=…`. Open it → open a conversation → press
+<kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd> → the bundled fixture app starts by itself and
+appears in the right sidebar. Nothing of yours is touched.
+
+### B. Use it on your own project
+
+1. **Install both packages into your profile**
+
+   ```bash
+   dsh plugin --profile web add link:<repo>/packages/dsh-app-bridge
+   dsh plugin --profile web add link:<repo>/packages/dsh-annotate
+   ```
+
+   `dsh plugin` is a thin `pnpm` wrapper for the profile directory, so it needs
+   `pnpm` on PATH (`npm i -g pnpm`) — or do it by hand:
+   `cd ~/.dsh/profiles/web && npx --yes pnpm@10 add link:<repo>/packages/dsh-annotate`
+
+2. **Mount them** — append to `~/.dsh/profiles/web/cordis.patch.yml`:
+
+   ```yaml
+   - insert:
+       - name: dsh-app-bridge
+         config: { target: "http://127.0.0.1:5180", prefix: "/app" }
+       - name: dsh-annotate
+         config: { command: "npm run dev:panel", port: 5180, base: "/app" }
+   ```
+
+   `command` / `port` / `base` must match the bridge's `target` / `prefix`.
+
+3. **Make your dev server serve under that prefix**
+
+   ```json
+   { "scripts": { "dev:panel": "IDD_BASE=/app/ vite --host 127.0.0.1 --port 5180 --strictPort" } }
+   ```
+
+   (Vite's `--base`; any dev server that can mount under a path works.) Browser
+   facing API paths must follow the base too — with Vite, prefix them with
+   `import.meta.env.BASE_URL`. Don't use `prefix: "/"`: that fights the harness
+   for its own root.
+
+4. **Restart the harness** (`dsh web`) — host halves and the bridge load at boot.
+
+5. **Annotate**: open a conversation with content, press
+   <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd> (`⌘⇧A` works too, as do the conversation
+   header's **标注** button and the right sidebar's `+` → guide entry). The tab
+   starts your dev server itself, shows `● running`, then loads the preview. Pick
+   elements, write notes, optionally tweak styles live, then **发给 AI** — or
+   <kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click an element to write and send in one step.
+
+### When something is off
+
+| Symptom | Cause / fix |
+| --- | --- |
+| `⌘⇧B` does nothing | The conversation has no content yet, so no header/sidebar surface exists — use a conversation that already has messages. |
+| Status stays `启动中` then `出错` | The project has no `dev:panel` script (or `command` is wrong). Open the toolbar's `▤` log drawer; the failure text is there. |
+| Preview blank, assets 404 | The dev server was started without a base prefix, so its asset URLs escaped to the harness root. Start it with `--base=/app/` and keep `base`/`prefix` identical. |
+| A “跨源” notice covers the preview | The address is not the same-origin one: use `<harness origin><base>`, not the dev server's own host:port. |
+| `502` from the bridge | The bridge is mounted but nothing listens upstream: the dev server died, or `target` points at the wrong port. |
+| No component chain in an annotation | Component names come from a React dev build's fiber; non-React pages omit that line. |
+
 ## Why the bridge is not optional
 
 Annotating elements inside an `<iframe>` means reading that document's DOM, and
