@@ -27,8 +27,22 @@ const PANEL_CSS = `
    the sidebar owns the surface, the tab owns its content insets. */
 .dsa-col { display:flex; flex-direction:column; height:100%; min-height:0; color:var(--dsw-alias-label-primary,#e8eaed);
   font:12.5px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
-.dsa-bar { display:flex; align-items:center; gap:5px; padding:8px 10px; flex:none;
+.dsa-bar { position:relative; z-index:3; display:flex; align-items:center; gap:5px; padding:8px 10px; flex:none;
   border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent); }
+/* The primary action lives at the bottom, away from the top edge. */
+.dsa-foot { display:flex; align-items:center; gap:6px; padding:8px 10px; flex:none;
+  border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent);
+  background:color-mix(in srgb,var(--dsw-alias-bg-base,#0d1117) 16%,transparent) }
+.dsa-foot .dsa-count { margin-left:auto; padding-inline:6px }
+.dsa-helpwrap { position:relative; display:inline-flex }
+.dsa-help { position:absolute; right:0; top:31px; z-index:9; width:268px; padding:10px 12px;
+  border-radius:10px; border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 14%,transparent);
+  background:var(--dsw-alias-bg-layer-1,#1b1f26); box-shadow:0 12px 34px rgba(0,0,0,.3);
+  font-size:11.5px; line-height:1.6; color:var(--dsw-alias-label-secondary,#9aa0a6) }
+.dsa-help b { display:block; margin:7px 0 2px; font-size:10px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--dsw-alias-label-primary,#e8eaed) }
+.dsa-help b:first-child { margin-top:0 }
+.dsa-help p { margin:0 }
 .dsa-bar .dsa-url { flex:1; min-width:0; height:26px; padding:0 9px; border-radius:6px; outline:none;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:inherit;
   background:color-mix(in srgb,var(--dsw-alias-bg-base,#0d1117) 38%,transparent);
@@ -104,6 +118,8 @@ const PANEL_CSS = `
 
 .dsa-list { flex:none; max-height:40%; min-height:0; overflow:auto;
   border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent) }
+/* No annotations, no row: the hint lives behind the ? instead. */
+.dsa-list:empty { display:none; border-top:0 }
 .dsa-item { display:flex; gap:9px; padding:9px 11px; border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 5%,transparent) }
 .dsa-item:hover { background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 4%,transparent) }
 .dsa-idx { flex:none; width:19px; height:19px; margin-top:1px; border-radius:50%; background:${MARKER}; color:#20160c;
@@ -160,6 +176,7 @@ const ICONS = {
   locate: 'M12 2v3m0 14v3M2 12h3m14 0h3M12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2z',
   trash: 'M6 7h12l-1 13H7zM9 4h6l1 2H8z',
   external: 'M14 4h6v6h-2V7.4l-7.3 7.3-1.4-1.4L16.6 6H14zM5 6h5v2H7v9h9v-3h2v5H5z',
+  help: 'M12 4a4 4 0 0 1 4 4c0 2-1.3 2.9-2.3 3.6-.7.5-1 .9-1 1.6v.4h-2v-.6c0-1.5.7-2.3 1.8-3.1.8-.5 1.4-1 1.4-1.9A1.9 1.9 0 0 0 12 6a1.9 1.9 0 0 0-2 1.8H8A3.9 3.9 0 0 1 12 4zm0 12.1a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z',
 }
 
 function Icon(props) {
@@ -283,6 +300,8 @@ function apply(ctx) {
           viewport: { w: 0, h: 0 },
           page: '',
           mode: 'idle',
+          helpOpen: false,
+          sending: false,
           cors: false,
           pending: [],
           notice: null,
@@ -313,6 +332,7 @@ function apply(ctx) {
   }
 
   let frameRef = null
+  let activePanel = null
 
   const notify = (type, payload) => {
     const frame = frameRef
@@ -416,7 +436,56 @@ function apply(ctx) {
     notify('ping')
   }
 
-  const sendAll = (panel, setDraft) => {
+  const composerEditable = () =>
+    document.querySelector('[contenteditable="true"][role="textbox"]') || document.querySelector('[contenteditable="true"]')
+
+  const composerText = () => {
+    const editable = composerEditable()
+    return editable ? String(editable.innerText || '') : ''
+  }
+
+  /** Press the composer's own send button — the same affordance the reader
+   *  would use. `aria-label` is localized, so the primary-button class is the
+   *  stable hook; the button is found by walking up from the editable to the
+   *  nearest ancestor that contains one. */
+  const submitComposer = () => {
+    const editable = composerEditable()
+    const isSend = (el) =>
+      el.tagName === 'BUTTON' &&
+      !el.disabled &&
+      el.offsetParent !== null &&
+      (el.getAttribute('aria-label') === 'Send message' || /_primary\b/.test(String(el.className)))
+
+    if (editable) {
+      let node = editable
+      for (let depth = 0; depth < 7 && node; depth += 1) {
+        const button = [...node.querySelectorAll('button')].find(isSend)
+        if (button) {
+          button.click()
+          return 'click'
+        }
+        node = node.parentElement
+      }
+    }
+    const anywhere = [...document.querySelectorAll('button')].find(isSend)
+    if (anywhere) {
+      anywhere.click()
+      return 'click'
+    }
+    if (editable) {
+      // Last resort: the harness' Enter gesture.
+      for (const type of ['keydown', 'keypress', 'keyup']) {
+        editable.dispatchEvent(
+          new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true })
+        )
+      }
+      return 'enter'
+    }
+    return null
+  }
+
+  const sendAll = async (panel, setDraft, options) => {
+    const submit = !options || options.submit !== false
     const state = panel.model.get()
     if (!state.annotations.length) return false
     const writer = setDraft || (panel.draftWriter && panel.draftWriter.setDraft)
@@ -426,24 +495,45 @@ function apply(ctx) {
     }
     // The page identity that matters is the upstream one, never the proxy path.
     const block = payloadBlock(state.annotations, state.url || state.page, state.viewport || { w: 0, h: 0 })
+    const count = state.annotations.length
     const current = String((panel.draftWriter && panel.draftWriter.draft) || '')
     const next = (current ? current.replace(/\s+$/, '') + '\n\n' : '') + block
     writer(next)
     if (panel.draftWriter) panel.draftWriter.draft = next
-    panel.model.set({
-      pending: state.pending.concat([{ id: 'p' + Date.now().toString(36), count: state.annotations.length, payload: block }]),
-      annotations: [],
-      mode: 'idle',
-      notice: null,
-    })
+    panel.model.set({ annotations: [], mode: 'idle', notice: null, helpOpen: false })
     notify('clear')
-    return true
+
+    if (!submit) {
+      // ⌥/Alt+click: leave it in the composer so the reader can add context.
+      panel.model.set({
+        pending: state.pending.concat([{ id: 'p' + Date.now().toString(36), count: count, payload: block }]),
+      })
+      flash(panel, '已填入输入框（' + count + ' 条），补充完自行发送')
+      return true
+    }
+
+    panel.model.set({ sending: true })
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    const how = submitComposer()
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    const left = composerText()
+    panel.model.set({ sending: false })
+    if (how && !left.includes('界面标注')) {
+      flash(panel, '已发送 ' + count + ' 条标注')
+      return true
+    }
+    panel.model.set({
+      pending: state.pending.concat([{ id: 'p' + Date.now().toString(36), count: count, payload: block }]),
+    })
+    flash(panel, '已填入输入框，但没能自动发送：点输入框旁的发送按钮即可')
+    return false
   }
 
     // --------------------------------------------------------------- tab body
 
   const AnnotateTab = (props) => {
     const panel = getPanel(props.sessionId)
+    activePanel = panel
     useSub(panel.model)
     const state = panel.model.get()
     const annotations = state.annotations
@@ -484,6 +574,16 @@ function apply(ctx) {
         setDraft: (value) => inputActions && inputActions.setDraft(value),
       }
     }, [panel, sessionId, draft, inputActions])
+
+    React.useEffect(() => {
+      if (!state.helpOpen) return undefined
+      const close = () => panel.model.set({ helpOpen: false })
+      const timer = setTimeout(() => document.addEventListener('mousedown', close), 0)
+      return () => {
+        clearTimeout(timer)
+        document.removeEventListener('mousedown', close)
+      }
+    }, [panel, state.helpOpen])
 
     React.useEffect(() => {
       const onMessage = (event) => {
@@ -666,34 +766,35 @@ function apply(ctx) {
             if (event.key === 'Enter') openUpstream(panel, event.target.value)
           },
         }),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '回到本地服务列表', onClick: showList }, React.createElement(Icon, { name: 'list' }))
-      ),
-      React.createElement(
-        'div',
-        { className: 'dsa-bar', style: { paddingTop: 0, borderTop: 0 } },
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '回到本地服务列表', onClick: showList }, React.createElement(Icon, { name: 'list' })),
         React.createElement(
-          'button',
-          {
-            className: 'dsa-ico',
-            type: 'button',
-            'data-on': state.mode === 'picking' ? 'true' : 'false',
-            title: '标记模式：点击元素写批注，⌘/Ctrl+点击立即发送，Esc 退出',
-            onClick: toggleMode,
-          },
-          React.createElement(Icon, { name: 'marker' })
-        ),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '在系统浏览器打开', onClick: () => window.open(state.url, '_blank', 'noopener') }, React.createElement(Icon, { name: 'external' })),
-        React.createElement('span', { className: 'dsa-count' }, annotations.length ? String(annotations.length) : ''),
-        React.createElement(
-          'button',
-          {
-            className: 'dsa-send',
-            type: 'button',
-            disabled: !annotations.length,
-            title: '把全部标注作为一段结构化说明写进输入框',
-            onClick: () => sendAll(panel, inputActions && inputActions.setDraft),
-          },
-          '发给 AI'
+          'span',
+          { className: 'dsa-helpwrap' },
+          React.createElement(
+            'button',
+            {
+              className: 'dsa-ico',
+              type: 'button',
+              'data-on': state.helpOpen ? 'true' : 'false',
+              title: '怎么用',
+              onClick: () => panel.model.set({ helpOpen: !state.helpOpen }),
+            },
+            React.createElement(Icon, { name: 'help' })
+          ),
+          state.helpOpen
+            ? React.createElement(
+                'div',
+                { className: 'dsa-help' },
+                React.createElement('b', null, '在预览里标注'),
+                React.createElement('p', null, '点下面「标记」，然后点页面里的元素写批注，Enter 保存。'),
+                React.createElement('p', null, 'Esc 退出标注状态（换页面、滚动都不受影响，随时再点「标记」继续）。'),
+                React.createElement('p', null, '⌘/Ctrl+点击元素 = 写完立即发送。'),
+                React.createElement('b', null, '改样式'),
+                React.createElement('p', null, '批注卡片里的「样式」可直接调字号/间距/颜色，改动在页面上实时生效。'),
+                React.createElement('b', null, '发送'),
+                React.createElement('p', null, '「发送」直接把标注发到对话里；⌥/Alt+点击「发送」则只填入输入框，方便你先补充几句。')
+              )
+            : null
         )
       ),
       React.createElement(
@@ -734,13 +835,37 @@ function apply(ctx) {
       ),
       React.createElement(
         'div',
+        { className: 'dsa-foot' },
+        React.createElement(
+          'button',
+          {
+            className: 'dsa-ico',
+            type: 'button',
+            'data-on': state.mode === 'picking' ? 'true' : 'false',
+            title: '标记模式：点击元素写批注（Esc 退出）',
+            onClick: toggleMode,
+          },
+          React.createElement(Icon, { name: 'marker' })
+        ),
+        React.createElement('button', { className: 'dsa-ico', type: 'button', title: '在系统浏览器打开', onClick: () => window.open(state.url, '_blank', 'noopener') }, React.createElement(Icon, { name: 'external' })),
+        React.createElement('span', { className: 'dsa-count' }, annotations.length ? annotations.length + ' 条' : ''),
+        React.createElement(
+          'button',
+          {
+            className: 'dsa-send',
+            type: 'button',
+            disabled: !annotations.length,
+            title: '发送给 AI（⌥/Alt+点击 = 只填入输入框）',
+            onClick: (event) => sendAll(panel, inputActions && inputActions.setDraft, { submit: !(event.altKey || event.metaKey) }),
+          },
+          state.sending ? '发送中…' : '发送'
+        )
+      ),
+      React.createElement(
+        'div',
         { className: 'dsa-list' },
         annotations.length === 0
-          ? React.createElement(
-              'div',
-              { className: 'dsa-empty', style: { position: 'static', background: 'transparent', padding: '16px' } },
-              React.createElement('p', null, '还没有标注。点上面的标记按钮，在页面里点击元素写批注；⌘/Ctrl+点击可直接发送。')
-            )
+          ? null
           : annotations.map((ann, index) =>
               React.createElement(
                 'div',
@@ -876,6 +1001,11 @@ function apply(ctx) {
 
   // ⌘⇧B mirrors Codex's in-app browser; ⌘⇧A stays as an alias.
   const onKeyDown = (event) => {
+    if (event.key === 'Escape' && activePanel && activePanel.model.get().mode !== 'idle') {
+      activePanel.model.set({ mode: 'idle', helpOpen: false })
+      notify('set-mode', { mode: 'idle' })
+      return
+    }
     if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return
     const key = String(event.key).toLowerCase()
     if (key !== 'b' && key !== 'a') return
