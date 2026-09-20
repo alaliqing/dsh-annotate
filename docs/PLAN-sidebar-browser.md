@@ -1,130 +1,96 @@
-# Plan: sidebar browser with annotation (Codex-shaped)
+# Plan: sidebar annotation for whatever local web is running
 
-## The expectation, restated
+> Replaces the earlier "annotate any web" draft. Scope is deliberately small:
+> **local web only, zero configuration, discovery instead of setup.**
 
-1. The right sidebar **is a browser**: open any URL — a local dev server, a file,
-   a public page. The plugin does not decide which URL matters.
-2. When a page is open, **annotating it is one gesture** (a mode/toggle), and the
-   comments land in the conversation as something DeepSeek can act on.
-3. Install **once**, restart **once**, then the capability is permanent and
-   applies to whatever the user opens. No per-project wiring.
-4. At most, the plugin may **suggest** a URL (never require one).
+## The shape we want
 
-## Where we are today
+1. Open the sidebar tab. It lists the **local web servers that are actually
+   running** (port, URL, page title), best guess first.
+2. Click one → it opens in the pane → **annotation works immediately**. Or type
+   any address in the address bar and open that instead.
+3. Nothing detected → say so, and **hint how to start one** (the session
+   workspace's own dev scripts), instead of silently doing nothing.
+4. Comments go back to the conversation as one structured block (already done).
+5. Install once, restart once, no per-project configuration. Forever after, the
+   capability is just there.
 
-| Expectation | Current state | Verdict |
-| --- | --- | --- |
-| Sidebar is a browser (any URL, navigation) | Address bar + reload + pick mode; one URL per session; no back/forward | **Partial** |
-| Annotate any page | Only **Same-Origin** pages, and only those mounted by a statically configured bridge (`target`/`prefix`) | **No** |
-| No per-project wiring | Install requires `command`/`port`/`base` on the plugin *and* `target`/`prefix` on the bridge *and* the project must serve under that prefix (`--base=/app/`) | **No** |
-| Suggest a URL | Nothing | **No** |
-| One install, one restart | Two packages, a YAML block, a project-side dev script | **Partial** |
-| Comments → DeepSeek from the composer | Structured block, chips, ⌘-click instant send | **Yes** |
+## The one non-obvious requirement
 
-So the *core* (annotate → structured comment → composer → DeepSeek) is done and
-good. What does not match is the **framing**: we built "preview *this project*",
-while the expectation is "a browser that can annotate *whatever* is open".
-
-### Why the gap exists (first principles)
-
-Codex's in-app browser reads and injects into arbitrary pages because it owns a
-**native WebContents** — a real browser process it controls. A web page (our
-plugin) only has an `<iframe>`, and the browser forbids reading a cross-origin
-frame's DOM. Nobody can code around that from inside a page. There are exactly
-three ways to get "annotate any web":
-
-| Vehicle | Covers | Cost |
-| --- | --- | --- |
-| A. Same-Origin mount (what we do now) | One project, configured | Zero fragility, but per-project setup |
-| B. **Server-side proxy through the harness origin** | Any `http(s)` URL the harness machine can reach — localhost dev servers, file servers, most public pages | Needs HTML rewriting + header surgery; login/CSP-heavy sites stay broken |
-| C. **Browser extension / native shell** | Truly any page, including logged-in ones | A second delivery vehicle; not a DSH plugin |
-
-The plan below moves the default from **A (configured)** to **B (automatic)**,
-keeps A as an opt-in for pixel-perfect fidelity, and documents C as the honest
-escape hatch rather than pretending B covers everything.
-
-## Plan
-
-### Phase 1 — Generic same-origin proxy (the enabling change)
-
-Replace the static mount with a per-request one, so the plugin never needs to be
-told about a project:
+"Detect → open → annotate" only works if we can reach **into** the opened page.
+A page served by `http://127.0.0.1:5173` is a *different origin* from the harness
+on `http://127.0.0.1:3080`, and the browser forbids reading a cross-origin
+iframe's DOM. So detection is the visible half; the enabling half is a **local
+proxy on the harness origin**:
 
 ```
-user types            http://localhost:5173/settings
-plugin loads          <harness>/__dsh_bridge/<base64url("http://localhost:5173")>/settings
-proxy maps back to    http://localhost:5173/settings
+detected            http://127.0.0.1:5173/settings
+loaded as           <harness>/__dsh_anno/<base64url("http://127.0.0.1:5173")>/settings
+proxy maps back to  http://127.0.0.1:5173/settings   (+ <base> injection, upgrades)
 ```
 
-1. One route prefix (`/__dsh_bridge/`), target encoded in the path; `target`/
-   `prefix` config becomes optional (fixed mode kept for compatibility).
-2. HTML rewriting on the way out: inject `<base href="<proxied prefix>">` so
-   root-absolute asset/API URLs resolve inside the proxy; rewrite `Location` and
-   `Content-Location`.
-3. Header surgery: drop `X-Frame-Options` / `frame-ancestors`, keep the rest,
-   pass cookies through with the proxy's own scope.
-4. Dynamic upgrade routing so Vite/Next HMR sockets survive.
-5. A tiny injected SDK shim that prefixes `fetch`/`XHR`/`EventSource`/`WebSocket`
-   when a page builds URLs from `location.origin` — the main SPA failure mode.
+This is what lets us drop the old `target`/`prefix`/`base`/`command`
+configuration: the target is whatever the user picked, decided per request.
 
-Exit criteria: the fixture, started **without any base prefix**, opens by typing
-`http://localhost:5199/` and is fully annotatable; `tests/gui-smoke.mjs` still
-passes; a proxy test suite covers rewriting, streaming, upgrades and 502s.
+Because it is loopback-only, the awkward parts of a general proxy (public sites,
+login flows, CSP on third-party content) simply do not apply.
 
-### Phase 2 — Make the sidebar an actual browser
+## Work
 
-6. Navigation: back / forward / reload / `⌘L` to focus the address bar; the field
-   follows in-page navigation.
-7. Open-or-proxy decision at load time: Same-Origin → load directly; anything
-   else → through the proxy; on failure show a clear notice plus "open in the
-   system browser".
-8. **Suggestions instead of configuration**: the host half reads the session
-   workspace's `package.json` scripts, probes the usual ports (5173, 3000, 4173,
-   5180, 8080…) for something listening, and remembers recent URLs. The tab shows
-   them as one-click chips ("detected http://localhost:5173 — open"), and typing
-   a URL always works.
+### 1. Discovery (host half)
 
-### Phase 3 — Installation and first-run polish
+New RPC `detect`:
 
-9. **One package.** Fold the proxy into `dsh-annotate` (keep `dsh-app-bridge` as
-   an optional standalone for fixed mounts). Install becomes
-   `dsh plugin --profile web add dsh-annotate` + one restart, with **no** YAML
-   config and **no** project changes — the `dev:panel`/base-prefix requirement
-   disappears for the default path.
-10. First-run surface: with no URL yet, show the suggestion chips plus a short
-    "how this works" line; the pick-mode toggle and `⌘⇧B` stay the only gestures.
+- list loopback TCP listeners (`lsof -nP -iTCP -sTCP:LISTEN` on macOS,
+  `/proc/net/tcp` on Linux, `netstat` fallback);
+- HTTP-probe each one (`GET /`, 800 ms) and keep what looks like a page;
+- return `{ port, url, title, status }`, common dev ports first (5173, 3000,
+  4173, 5180, 8080, 8000, 5000, 5500, 9000), cached for a couple of seconds;
+- never probes anything off loopback.
 
-### Phase 4 — Boundaries (explicitly out of scope, or a separate vehicle)
+### 2. Local proxy (host half)
 
-11. Logged-in sites, strict-CSP/anti-proxy sites: the proxy cannot be honest
-    here. Document it, detect the common cases (a login redirect, a CSP
-    `frame-ancestors` refusal) and say so in the panel.
-12. If true "any web" is needed later, the escape hatch is a browser extension
-    reusing this same overlay + payload protocol; it is a sibling project, not a
-    rewrite of this one.
+- One route prefix, target encoded in the path (static `target`/`prefix` stays as
+  an optional override for people who want a fixed mount).
+- `<base href>` injection so root-absolute asset/API URLs resolve inside the
+  proxy; rewrite `Location`/`Content-Location`; drop `X-Frame-Options` and
+  `frame-ancestors` for the proxied response.
+- Dynamic upgrade routing so dev-server HMR sockets survive.
+- A small injected shim prefixing `fetch`/`XHR`/`EventSource`/`WebSocket` calls
+  that were built from `location.origin` (the usual SPA failure mode).
 
-## What we keep
+### 3. The pane (client half)
 
-The annotation data model and payload (selector + match count + semantic anchors
-+ component chain + viewport placement + style edits), the right-sidebar tab
-shape (push-mode column, flat styling, guide entry, `⌘⇧B`), live style tweaks,
-the composer handoff with chips and ⌘-click instant send, the fixture and the
-`scripts/dev.mjs` loop.
+- **No page open** → the detected list as one-click rows, the address bar below
+  it, and a hint line: what to run (read from the session workspace's
+  `package.json` scripts, e.g. `npm run dev`) if the list is empty.
+- **Page open** → the current stage, plus back / forward / reload / `⌘L`, and a
+  "back to the list" affordance. Keep `⌘⇧B`, the conversation-header button and
+  the sidebar guide entry as the ways in.
+- Non-local addresses are allowed to open but are labelled for what they are
+  (no support promise), so the panel never implies more than it delivers.
 
-## What we drop or demote
+### 4. Installation
 
-`command`/`port`/`base` and the bridge's `target`/`prefix` as *required* install
-steps: they become optional overrides. The project-side `dev:panel` base-prefix
-requirement stops being the documented path (it stays as the high-fidelity
-option).
+- Fold the proxy into `dsh-annotate`; `dsh-app-bridge` remains published for
+  fixed mounts.
+- Install = `dsh plugin --profile web add dsh-annotate` + one restart. No YAML
+  block, no project-side script, no base prefix.
+- Auto-starting a dev server (`command`) is demoted to an optional override; the
+  default is: detect and hint.
 
-## Risks
+## Kept as-is
 
-- HTML rewriting is inherently lossy: absolute URLs built inside JS, SRI hashes,
-  service workers, cookie domains. Mitigation: the injected shim, plus A as an
-  opt-in for projects that must be pixel-perfect.
-- Proxying public sites raises content-integrity questions; the panel should mark
-  proxied pages (a small "proxied" badge) so nobody mistakes the rewritten copy
-  for the original.
-- Two loaders (direct + proxied) means two code paths in the client: keep the
-  decision in one place, and keep the direct path first-class.
+Annotation payload (selector + match count + semantic anchors + component chain +
+viewport placement + style edits), the sidebar tab shape, live style tweaks,
+composer chips and ⌘-click instant send, the fixture app and `scripts/dev.mjs`.
+
+## Acceptance
+
+- With `examples/demo-app` running **without any base prefix** on 5199, the tab
+  lists it by itself; one click opens it; an annotation on it reaches the
+  composer with the right selector.
+- With nothing running, the tab explains how to start something instead of
+  showing an empty pane.
+- Typing any loopback URL by hand behaves exactly like picking it from the list.
+- `tests/gui-smoke.mjs` passes against a discovered (not configured) target.
