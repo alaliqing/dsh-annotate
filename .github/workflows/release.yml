@@ -75,6 +75,17 @@ jobs:
         if: steps.bridge.outputs.published == 'false'
         run: npm publish --access public --provenance
         working-directory: packages/dsh-app-bridge
+
+  # Separate from the publish job because `gh release create` needs
+  # `contents: write` and the publishing steps should not have it: under the
+  # `contents: read` granted above, the release call fails with a 403.
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
       - name: github release
         env:
           GH_TOKEN: ${{ github.token }}
