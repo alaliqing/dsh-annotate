@@ -4,10 +4,18 @@ name: Release
 # manifests say. Bump both versions, commit, then tag.
 #
 #   npm version --no-git-tag-version --workspace packages/dsh-annotate 0.1.1
+#   npm version --no-git-tag-version --workspace packages/dsh-app-bridge 0.1.1
 #   git commit -am "release 0.1.1" && git tag v0.1.1 && git push --follow-tags
 #
-# Authentication is either a repository secret named NPM_TOKEN, or npm trusted
-# publishing (OIDC) once configured for both packages on npmjs.com.
+# Authentication is npm trusted publishing (OIDC), so no token is stored in the
+# repository. Each package needs a trusted publisher configured on npmjs.com
+# that names this repository and the workflow file `release.yml`. Configure it
+# for both packages before tagging the release after this one.
+#
+# A version already on the registry is skipped, not republished, so a tag whose
+# version was published by hand still produces the GitHub release. npm needs
+# 11.5.1 or newer for OIDC, which is why the job runs Node 24: Node 22 ships npm
+# 10, and an npm that is too old reports the mismatch as a misleading 404.
 
 on:
   push:
@@ -29,7 +37,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
       - run: npm ci
@@ -37,16 +45,36 @@ jobs:
       - run: npm run test:distribution
       - run: npx playwright install --with-deps chromium
       - run: npm run test:reliability
+      - name: is dsh-annotate already published?
+        id: annotate
+        working-directory: packages/dsh-annotate
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "dsh-annotate@$version" version > /dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "dsh-annotate@$version is already on the registry, skipping"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: is dsh-app-bridge already published?
+        id: bridge
+        working-directory: packages/dsh-app-bridge
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "dsh-app-bridge@$version" version > /dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "dsh-app-bridge@$version is already on the registry, skipping"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: publish dsh-annotate
+        if: steps.annotate.outputs.published == 'false'
         run: npm publish --access public --provenance
         working-directory: packages/dsh-annotate
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: publish dsh-app-bridge
+        if: steps.bridge.outputs.published == 'false'
         run: npm publish --access public --provenance
         working-directory: packages/dsh-app-bridge
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: github release
         env:
           GH_TOKEN: ${{ github.token }}
