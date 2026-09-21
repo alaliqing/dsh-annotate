@@ -1,3 +1,5 @@
+<div align="center">
+
 # dsh-annotate
 
 **English** · [简体中文](README.zh-CN.md)
@@ -7,6 +9,8 @@
 [![Node.js 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](package.json)
 
 **Point at the UI. Give your coding agent the exact context.**
+
+</div>
 
 `dsh-annotate` adds a visual review panel to the DeepSeek Harness web client.
 Open a local app, click the elements you want changed, leave notes, and send the

@@ -1,3 +1,5 @@
+<div align="center">
+
 # dsh-annotate
 
 [English](README.md) · **简体中文**
@@ -7,6 +9,8 @@
 [![Node.js 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](package.json)
 
 **直接指出界面问题，把准确上下文交给编程助手。**
+
+</div>
 
 `dsh-annotate` 为 DeepSeek Harness 网页端增加了一个可视化评审面板。打开本地应用，
 点选想改的元素，逐条留下意见，再把整份评审以结构化文本发进当前对话。
