@@ -5,6 +5,7 @@
 **English** · [简体中文](README.zh-CN.md)
 
 [![CI](https://github.com/alaliqing/dsh-annotate/actions/workflows/ci.yml/badge.svg)](https://github.com/alaliqing/dsh-annotate/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/dsh-annotate.svg)](https://www.npmjs.com/package/dsh-annotate)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](package.json)
 
@@ -21,9 +22,6 @@ whole review to your conversation as structured text.
 ```text
 ⌘/Ctrl ⇧ B → choose a local app → Mark → click → comment → send
 ```
-
-> **Pre-release:** the package is not on npm yet. Install it from a local
-> checkout; built files are already included.
 
 ## What it gives you
 
@@ -47,13 +45,17 @@ stops your development server.
 
 ## Install
 
+Hand this line to your coding agent, or run it yourself:
+
+```text
+Install dsh-annotate: dsh plugin --profile web add dsh-annotate, then add it to the profile's cordis.patch.yml and restart dsh web.
+```
+
 Requirements: a restartable DeepSeek Harness web client, Node.js 20+, and
 Chromium (the validated browser).
 
 ```sh
-git clone https://github.com/alaliqing/dsh-annotate.git
-cd ~/.dsh/profiles/web
-npx --yes pnpm@10 add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
+dsh plugin --profile web add dsh-annotate
 ```
 
 Add the plugin to the profile's `cordis.patch.yml`:
@@ -63,10 +65,14 @@ Add the plugin to the profile's `cordis.patch.yml`:
     - name: dsh-annotate
 ```
 
-Restart `dsh web`. After the first npm release, the install command will be:
+Restart `dsh web`.
+
+To run an unreleased checkout instead, link it into the profile:
 
 ```sh
-dsh plugin --profile web add dsh-annotate
+git clone https://github.com/alaliqing/dsh-annotate.git
+cd ~/.dsh/profiles/web
+npx --yes pnpm@10 add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
 ```
 
 ## Use

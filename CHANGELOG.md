@@ -4,12 +4,20 @@ Notable changes to `dsh-annotate` and `dsh-app-bridge`. Both packages are
 versioned together; the format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2026-09-21
+
+First public release. The plugin was developed as a private prototype before
+this; everything below is new to the public repository in one release.
 
 ### Added
 
-- **Workspace-first service discovery.** A listening service is now claimed by
-  the conversation's workspace when the owning process was started inside it
+- **Right-sidebar annotation tab** for the DeepSeek Harness web client, opened
+  from the conversation header button, the sidebar `+` guide, or `⌘/Ctrl⇧B`.
+- **Zero-configuration local service discovery**: probes loopback listeners over
+  IPv4 and IPv6, reports page titles, refreshes every five seconds while
+  visible, and explains how to start a server when nothing is found.
+- **Workspace-first ranking.** A listening service is claimed by the
+  conversation's workspace when the owning process was started inside it
   (`lsof` PID, then `/proc` or `lsof` for the working directory), shown as
   **This project**, and ranked above everything else. Ports the workspace names
   in `package.json` or a Vite config are marked **Configured port** and rank
@@ -23,19 +31,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   the file's own address (with any hash route) as the page identity.
 - **`detect.staticFiles`** to turn the static-page listing off, matching the
   existing `detect.staticPorts`.
-
-## [0.1.0]
-
-First public release. The plugin was developed as a private prototype before
-this; everything below is new to the public repository in one release.
-
-### Added
-
-- **Right-sidebar annotation tab** for the DeepSeek Harness web client, opened
-  from the conversation header button, the sidebar `+` guide, or `⌘/Ctrl⇧B`.
-- **Zero-configuration local service discovery**: probes loopback listeners over
-  IPv4 and IPv6, reports page titles, refreshes every five seconds while
-  visible, and explains how to start a server when nothing is found.
 - **Isolated loopback preview origin**, one ephemeral port per session/app, so
   root-absolute scripts, styles, SPA routes and WebSocket upgrades work without a
   path prefix while the preview DOM and web storage stay separate from the
@@ -74,5 +69,4 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
-[Unreleased]: https://github.com/alaliqing/dsh-annotate/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.0

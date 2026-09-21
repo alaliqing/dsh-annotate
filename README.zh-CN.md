@@ -5,6 +5,7 @@
 [English](README.md) · **简体中文**
 
 [![CI](https://github.com/alaliqing/dsh-annotate/actions/workflows/ci.yml/badge.svg)](https://github.com/alaliqing/dsh-annotate/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/dsh-annotate.svg)](https://www.npmjs.com/package/dsh-annotate)
 [![许可证：MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](package.json)
 
@@ -20,8 +21,6 @@
 ```text
 ⌘/Ctrl ⇧ B → 选择本地应用 → 标记 → 点选 → 写批注 → 发送
 ```
-
-> **预发布状态：** 目前尚未发布到 npm，请从本地检出安装；仓库已包含构建产物。
 
 ## 核心能力
 
@@ -40,13 +39,17 @@
 
 ## 安装
 
+把这行交给你的编程助手，或者自己执行：
+
+```text
+安装 dsh-annotate：dsh plugin --profile web add dsh-annotate，然后写入该 profile 的 cordis.patch.yml 并重启 dsh web。
+```
+
 需要可重启的 DeepSeek Harness 网页客户端、Node.js 20+，以及 Chromium
 （目前完成完整验证的浏览器）。
 
 ```sh
-git clone https://github.com/alaliqing/dsh-annotate.git
-cd ~/.dsh/profiles/web
-npx --yes pnpm@10 add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
+dsh plugin --profile web add dsh-annotate
 ```
 
 在该 profile 的 `cordis.patch.yml` 中启用插件：
@@ -56,10 +59,14 @@ npx --yes pnpm@10 add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
     - name: dsh-annotate
 ```
 
-重启 `dsh web`。首个 npm 版本发布后，安装命令会变为：
+重启 `dsh web`。
+
+如果要跟踪尚未发布的检出，把包链接进 profile：
 
 ```sh
-dsh plugin --profile web add dsh-annotate
+git clone https://github.com/alaliqing/dsh-annotate.git
+cd ~/.dsh/profiles/web
+npx --yes pnpm@10 add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
 ```
 
 ## 使用
