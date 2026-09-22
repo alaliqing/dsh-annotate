@@ -1,16 +1,20 @@
 name: Release
 
-# Publishing is tag-driven: pushing `v*` publishes whatever the two package
-# manifests say. Bump both versions, commit, then tag.
+# Publishing is tag-driven: pushing `v*` publishes whatever the dsh-annotate
+# manifest says. Bump its version, commit, then tag.
 #
 #   npm version --no-git-tag-version --workspace packages/dsh-annotate 0.1.1
-#   npm version --no-git-tag-version --workspace packages/dsh-app-bridge 0.1.1
 #   git commit -am "release 0.1.1" && git tag v0.1.1 && git push --follow-tags
 #
 # Authentication is npm trusted publishing (OIDC), so no token is stored in the
-# repository. Each package needs a trusted publisher configured on npmjs.com
-# that names this repository and the workflow file `release.yml`. Configure it
-# for both packages before tagging the release after this one.
+# repository. dsh-annotate needs a trusted publisher configured on npmjs.com
+# that names this repository and the workflow file `release.yml`, and that
+# allows `npm publish` rather than only `npm stage publish`.
+#
+# dsh-app-bridge is frozen at 0.1.0: that version stays on the registry and in
+# this repository, and this workflow no longer publishes it, so it needs no
+# trusted publisher. Releasing it again means adding it back here together with
+# its own trusted publisher.
 #
 # A version already on the registry is skipped, not republished, so a tag whose
 # version was published by hand still produces the GitHub release. npm needs
@@ -45,7 +49,7 @@ jobs:
       - run: npm run test:distribution
       - run: npx playwright install --with-deps chromium
       - run: npm run test:reliability
-      - name: is dsh-annotate already published?
+      - name: is this version already published?
         id: annotate
         working-directory: packages/dsh-annotate
         run: |
@@ -56,25 +60,10 @@ jobs:
           else
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: is dsh-app-bridge already published?
-        id: bridge
-        working-directory: packages/dsh-app-bridge
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if npm view "dsh-app-bridge@$version" version > /dev/null 2>&1; then
-            echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "dsh-app-bridge@$version is already on the registry, skipping"
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
       - name: publish dsh-annotate
         if: steps.annotate.outputs.published == 'false'
         run: npm publish --access public --provenance
         working-directory: packages/dsh-annotate
-      - name: publish dsh-app-bridge
-        if: steps.bridge.outputs.published == 'false'
-        run: npm publish --access public --provenance
-        working-directory: packages/dsh-app-bridge
 
   # Separate from the publish job because `gh release create` needs
   # `contents: write` and the publishing steps should not have it: under the

@@ -1,8 +1,12 @@
 # Changelog
 
-Notable changes to `dsh-annotate` and `dsh-app-bridge`. Both packages are
-versioned together; the format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
-and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Notable changes to `dsh-annotate`. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
+adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+`dsh-app-bridge` is frozen at 0.1.0: that version stays on the registry and in
+this repository, and the release workflow no longer publishes it. Its history
+is the 0.1.0 entry below.
 
 ## [0.1.0] - 2026-09-21
 
