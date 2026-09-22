@@ -12,6 +12,12 @@ annotation payload, configuration and the documented limits, see the
 
 ## Install
 
+Hand this line to your coding agent, or run it yourself:
+
+```text
+Install dsh-annotate: dsh plugin --profile web add dsh-annotate, then add it to the profile's cordis.patch.yml and restart dsh web.
+```
+
 ```sh
 dsh plugin --profile web add dsh-annotate
 ```

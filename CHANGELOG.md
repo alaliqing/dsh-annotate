@@ -8,6 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 this repository, and the release workflow no longer publishes it. Its history
 is the 0.1.0 entry below.
 
+## [0.1.1] - 2026-09-22
+
+### Changed
+
+- The package README opens with the single install line to hand to a coding
+  agent, matching the repository README.
+
+### Security
+
+- Releases are published from CI through npm trusted publishing (OIDC), so
+  versions from here on carry a provenance attestation. 0.1.0 was published by
+  hand and has none.
+
 ## [0.1.0] - 2026-09-21
 
 First public release. The plugin was developed as a private prototype before
@@ -73,4 +86,5 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.1]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.1
 [0.1.0]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.0
