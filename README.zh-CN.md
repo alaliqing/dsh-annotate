@@ -29,11 +29,10 @@
 把下面这段话交给能访问 Harness 所在电脑的编程助手：
 
 ```text
-请为本机 DeepSeek Harness 的 web profile 安装 dsh-annotate。
-1. 确认 Node.js 20+、pnpm 和当前网页端使用的 dsh CLI 可用，然后运行 `dsh plugin --profile web add dsh-annotate`。如果网页端通过 `npx @deepseek-ai/dsh` 启动，下文命令也用它代替 `dsh`。
-2. 当前包还需要手动启用。保留 `$DSH_HOME/profiles/web/cordis.patch.yml`（默认 `~/.dsh/profiles/web/cordis.patch.yml`）里的已有内容。只在没有 dsh-annotate 时增加一个顶层 `- insert:` 项，子项为 `- name: dsh-annotate`。
-3. 运行 `dsh --profile web --dump-config`，确认结果中出现 dsh-annotate，并报告安装和配置检查结果。
-4. 不要直接结束正在使用的 Harness 会话。告诉我重启 web profile、刷新浏览器后，可以通过 ⌘/Ctrl⇧B 或对话顶部的「标注」按钮打开面板。
+请阅读 https://github.com/alaliqing/dsh-annotate，并到 https://www.npmjs.com/package/dsh-annotate 核对已发布版本。
+按适用于该版本的安装说明，把插件装进本机 DeepSeek Harness 的 web profile。保留已有 profile 配置，不要中断当前 Harness 会话。
+验证插件已启用，报告检查结果，并告诉我如何重启 Harness、打开「标注」面板。
+如果仓库说明对应尚未发布的版本，请查阅匹配发布 tag 的 README。如果无法访问安装说明，请告知我，不要猜测步骤。
 ```
 
 ### 手动安装

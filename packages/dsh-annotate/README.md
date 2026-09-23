@@ -17,11 +17,10 @@ annotation payload, configuration and the documented limits, see the
 Copy this into an agent with access to the machine running Harness:
 
 ```text
-Install dsh-annotate for my local DeepSeek Harness web profile.
-1. Check Node.js 20+, pnpm, and the dsh CLI used to launch the web client. Run `dsh plugin --profile web add dsh-annotate`. If the web client uses `npx @deepseek-ai/dsh`, use that in place of `dsh` for these commands.
-2. The package currently needs manual activation. Preserve the existing `$DSH_HOME/profiles/web/cordis.patch.yml` (default `~/.dsh/profiles/web/cordis.patch.yml`). Add a top-level `- insert:` entry containing `- name: dsh-annotate` only if absent.
-3. Run `dsh --profile web --dump-config` and confirm that dsh-annotate appears. Report the install and configuration results.
-4. Do not stop the Harness session you are using. Tell me to restart the web profile and refresh the browser, then open Annotate with ⌘/Ctrl⇧B or the conversation-header button.
+Read https://github.com/alaliqing/dsh-annotate and check the published version at https://www.npmjs.com/package/dsh-annotate.
+Follow the installation instructions for that version to install the plugin into my local DeepSeek Harness web profile. Preserve existing profile configuration and do not interrupt this Harness session.
+Verify that the plugin is enabled, report what you checked, and tell me how to restart Harness and open Annotate.
+If the repository instructions describe an unreleased version, consult the README at the matching release tag. If you cannot access the instructions, tell me instead of guessing.
 ```
 
 ### Install manually
