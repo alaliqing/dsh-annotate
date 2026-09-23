@@ -23,6 +23,36 @@ whole review to your conversation as structured text.
 ⌘/Ctrl ⇧ B → choose a local app → Mark → click → comment → send
 ```
 
+## Install
+
+Give a coding agent this prompt:
+
+```text
+Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the local DeepSeek Harness web profile. Preserve existing configuration and do not stop the current Harness session. Verify the installation, then explain how to restart Harness and open Annotate.
+```
+
+Or install manually with Node.js 20+, the `dsh` CLI, and pnpm on `PATH`:
+
+```sh
+dsh plugin --profile web add dsh-annotate
+```
+
+The current package needs a profile entry in
+`$DSH_HOME/profiles/web/cordis.patch.yml` (default
+`~/.dsh/profiles/web/cordis.patch.yml`). Keep existing entries and add this only
+once:
+
+```yaml
+- insert:
+    - name: dsh-annotate
+```
+
+Check for `dsh-annotate` with `dsh --profile web --dump-config`. Restart the web
+profile and refresh the browser, then click **Annotate** or press `⌘/Ctrl⇧B`.
+If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
+`npx @deepseek-ai/dsh`. See [compatibility](docs/compatibility.md) for tested
+versions and limits.
+
 ## What it gives you
 
 - **Zero-config discovery** of running loopback development servers, including
@@ -43,42 +73,6 @@ whole review to your conversation as structured text.
 No screenshot is captured and no app style is changed. By default, the plugin
 only discovers servers you already run; process control requires an explicitly
 configured command.
-
-## Install
-
-Hand this line to your coding agent, or run it yourself:
-
-```text
-Install dsh-annotate: dsh plugin --profile web add dsh-annotate, then add it to the profile's cordis.patch.yml and restart dsh web.
-```
-
-Requirements: a restartable DeepSeek Harness web client, Node.js 20+, pnpm on
-`PATH` (used by `dsh plugin`), and Chromium (the validated browser).
-
-Verified with Harness CLI `0.1.5-rc.2`, web app and session controller
-`0.1.5-rc.3`. See [compatibility and native acceptance checks](docs/compatibility.md)
-for the exact environment and validation limits.
-
-```sh
-dsh plugin --profile web add dsh-annotate
-```
-
-Add the plugin to the profile's `cordis.patch.yml`:
-
-```yaml
-- insert:
-    - name: dsh-annotate
-```
-
-Restart `dsh web`.
-
-To run an unreleased checkout instead, link it into the profile:
-
-```sh
-git clone https://github.com/alaliqing/dsh-annotate.git
-cd ~/.dsh/profiles/web
-npx --yes pnpm@10 add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
-```
 
 ## Use
 
@@ -175,6 +169,15 @@ npm ci
 npx playwright install chromium
 npm run check
 npm test
+```
+
+To use an unreleased checkout, link it into the web profile and then add the
+profile entry shown above:
+
+```sh
+git clone https://github.com/alaliqing/dsh-annotate.git
+cd "${DSH_HOME:-$HOME/.dsh}/profiles/web"
+npx --yes pnpm@10 add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
 ```
 
 The default tests drive the real built client, shim, and overlay in Chromium

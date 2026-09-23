@@ -22,6 +22,33 @@
 ⌘/Ctrl ⇧ B → 选择本地应用 → 标记 → 点选 → 写批注 → 发送
 ```
 
+## 安装
+
+把下面这段话交给能访问 Harness 所在电脑的编程助手：
+
+```text
+阅读 https://github.com/alaliqing/dsh-annotate，按说明将最新已发布版本安装到本机 DeepSeek Harness 的 web profile。保留已有配置，不要中断当前 Harness 会话。验证安装结果，并说明如何重启 Harness、打开「标注」面板。
+```
+
+也可以手动安装，需要 Node.js 20+、`dsh` CLI 和 `PATH` 中可用的 pnpm：
+
+```sh
+dsh plugin --profile web add dsh-annotate
+```
+
+当前版本还需要在 `$DSH_HOME/profiles/web/cordis.patch.yml`（默认
+`~/.dsh/profiles/web/cordis.patch.yml`）中启用。保留现有配置，只添加一次：
+
+```yaml
+- insert:
+    - name: dsh-annotate
+```
+
+用 `dsh --profile web --dump-config` 确认输出中出现 `dsh-annotate`。
+重启 web profile、刷新浏览器后，点击**标注**或按 `⌘/Ctrl⇧B`。
+如果使用 `npx @deepseek-ai/dsh web`，把上述命令中的 `dsh` 换成
+`npx @deepseek-ai/dsh`。已测试版本和限制见[兼容性记录](docs/compatibility.md)。
+
 ## 核心能力
 
 - **零配置发现**正在运行的本地开发服务器，同时支持 IPv4 和 IPv6，并优先列出属于当前
@@ -37,41 +64,6 @@
 
 插件不会截图，也不会修改应用样式。默认只发现你已经运行的服务器；只有显式配置了
 启动命令，才会启用进程控制。
-
-## 安装
-
-把这行交给你的编程助手，或者自己执行：
-
-```text
-安装 dsh-annotate：dsh plugin --profile web add dsh-annotate，然后写入该 profile 的 cordis.patch.yml 并重启 dsh web。
-```
-
-需要可重启的 DeepSeek Harness 网页客户端、Node.js 20+、`PATH` 中可用的 pnpm
-（供 `dsh plugin` 使用），以及 Chromium（目前完成完整验证的浏览器）。
-
-已验证 Harness CLI `0.1.5-rc.2`，网页端与会话控制器 `0.1.5-rc.3`。
-具体环境及验证边界见[兼容性与真实 Harness 验收](docs/compatibility.md)。
-
-```sh
-dsh plugin --profile web add dsh-annotate
-```
-
-在该 profile 的 `cordis.patch.yml` 中启用插件：
-
-```yaml
-- insert:
-    - name: dsh-annotate
-```
-
-重启 `dsh web`。
-
-如果要跟踪尚未发布的检出，把包链接进 profile：
-
-```sh
-git clone https://github.com/alaliqing/dsh-annotate.git
-cd ~/.dsh/profiles/web
-npx --yes pnpm@10 add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
-```
 
 ## 使用
 
@@ -156,6 +148,14 @@ npm ci
 npx playwright install chromium
 npm run check
 npm test
+```
+
+要使用尚未发布的检出，可链接进 web profile，然后按上面的说明启用：
+
+```sh
+git clone https://github.com/alaliqing/dsh-annotate.git
+cd "${DSH_HOME:-$HOME/.dsh}/profiles/web"
+npx --yes pnpm@10 add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
 ```
 
 默认测试会在 Chromium 中驱动真实的 client、shim 和 overlay 构建产物，使用 Harness

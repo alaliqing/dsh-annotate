@@ -1,7 +1,7 @@
 # dsh-annotate
 
 Element annotation and review panel for the
-[DeepSeek Harness](https://www.npmjs.com/search?q=%40deepseek-ai%2Fdsh) web
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web
 client. Open a local app you are already running, click the elements you want
 changed, write a note on each, and send the whole review to the conversation as
 one structured block.
@@ -12,25 +12,32 @@ annotation payload, configuration and the documented limits, see the
 
 ## Install
 
-Hand this line to your coding agent, or run it yourself:
+Give a coding agent this prompt:
 
 ```text
-Install dsh-annotate: dsh plugin --profile web add dsh-annotate, then add it to the profile's cordis.patch.yml and restart dsh web.
+Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the local DeepSeek Harness web profile. Preserve existing configuration and do not stop the current Harness session. Verify the installation, then explain how to restart Harness and open Annotate.
 ```
+
+Or install manually with Node.js 20+, the `dsh` CLI, and pnpm on `PATH`:
 
 ```sh
 dsh plugin --profile web add dsh-annotate
 ```
 
-Then add the plugin to that profile's `cordis.patch.yml`:
+The current package needs a profile entry in
+`$DSH_HOME/profiles/web/cordis.patch.yml` (default
+`~/.dsh/profiles/web/cordis.patch.yml`). Keep existing entries and add this only
+once:
 
 ```yaml
 - insert:
     - name: dsh-annotate
 ```
 
-Restart `dsh web`. No runtime dependencies, and the built files ship with the
-package, so there is no build step.
+Check for `dsh-annotate` with `dsh --profile web --dump-config`. Restart the web
+profile and refresh the browser, then click **Annotate** or press `⌘/Ctrl⇧B`.
+If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
+`npx @deepseek-ai/dsh`. The package ships built files; no build step is needed.
 
 ## What you get
 
@@ -56,18 +63,17 @@ package, so there is no build step.
 | `lib/client.js` | Client half: the sidebar tab |
 | `lib/shim.js` | Injected into previewed documents: URL and socket mapping, navigation reports |
 | `lib/overlay.js` | Injected into previewed documents: picking, markers, comment cards |
-| `cordis.patch.yml` | The profile patch this package contributes |
+| `cordis.patch.yml` | Activation example to add to the web profile manually |
 
-## Requirements
+## Compatibility
 
-- Node.js 20 or newer.
-- pnpm on `PATH` for `dsh plugin`.
-- A restartable DeepSeek Harness web client.
-- Chromium is the validated browser.
+Chromium is the validated browser. A restartable, local DeepSeek Harness web
+client is required.
 
-Verified with Harness CLI `0.1.5-rc.2`, web app and session controller
-`0.1.5-rc.3`. See the [compatibility record](https://github.com/alaliqing/dsh-annotate/blob/main/docs/compatibility.md)
-for the exact environment and the repeatable native acceptance check.
+A packed unreleased checkout passed a native check with Harness CLI
+`0.1.5-rc.2`, web app and session controller `0.1.5-rc.3`; that check did not
+install npm `0.1.1`. See the [compatibility record](https://github.com/alaliqing/dsh-annotate/blob/main/docs/compatibility.md)
+for the environment and validation limits.
 
 Local development only: proxy targets are restricted to loopback, so a remote
 harness or a public deployment is out of scope.
