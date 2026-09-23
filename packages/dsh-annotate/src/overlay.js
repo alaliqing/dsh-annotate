@@ -36,6 +36,7 @@
     hover: null,
     selected: null,
     drafting: null, // { id, selector, ... , comment }
+    viewing: null, // id of the read-only comment currently open
     sendOnCommit: false, // ⌘/Ctrl-click submits the batch right away
     annotations: [],
     anchor: null, // element for the open card
@@ -110,6 +111,7 @@
       '.dsa-card header button:hover{background:' + fieldBg + ';color:' + ink + '}',
       '.dsa-card textarea{display:block;width:100%;min-height:62px;max-height:220px;resize:vertical;border:0;outline:none;',
       'padding:9px 10px;background:transparent;color:inherit;font:inherit;font-size:12.5px}',
+      '.dsa-comment-text{padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px}',
       '.dsa-card footer{display:flex;align-items:center;gap:8px;padding:6px 8px 8px 10px;border-top:1px solid ' + hair + '}',
       '.dsa-card footer .dsa-hint{flex:1;color:' + muted + ';font-size:10.5px}',
       '.dsa-btn{all:unset;cursor:pointer;padding:4px 10px;border-radius:4px;border:1px solid ' + hair + ';font-size:11.5px}',
@@ -496,7 +498,7 @@
     state.annotations.forEach(function (ann, index) {
       var pin = document.createElement('button')
       pin.type = 'button'
-      pin.setAttribute('aria-label', t('overlay.editPin', { n: index + 1, comment: ann.comment }))
+      pin.setAttribute('aria-label', t('overlay.viewPin', { n: index + 1, comment: ann.comment }))
       pin.className = 'dsa-pin'
       pin.textContent = String(index + 1)
       pin.title = ann.comment
@@ -506,20 +508,16 @@
         pin.style.left = anchor.x + 'px'
         pin.style.top = anchor.y + 'px'
       }
-      pin.setAttribute('data-open', state.drafting && state.drafting.id === ann.id ? 'true' : 'false')
+      pin.setAttribute('data-open', state.viewing === ann.id ? 'true' : 'false')
       pin.addEventListener('click', function (event) {
         event.stopPropagation()
-        if (state.busy) return
+        if (state.viewing === ann.id) { closeCard(); return }
         var el = elementFor(ann)
         if (!el) {
           post('missing', { id: ann.id })
           return
         }
-        var live = detailOf(el)
-        openCard(
-          { id: ann.id, detail: Object.assign({}, ann, { doc: live.doc, rect: live.rect }), comment: ann.comment, existing: true },
-          el
-        )
+        showComment(ann, el)
         post('focus', { id: ann.id })
       })
       pinLayer.appendChild(pin)
@@ -539,18 +537,38 @@
   // ------------------------------------------------------------------ card UI
 
   function closeCard(preserve) {
-    if (card && preserve !== true) post('draft', { draft: null })
+    if (card && state.drafting && preserve !== true) post('draft', { draft: null })
     if (card && card.parentNode) card.parentNode.removeChild(card)
     card = null
     state.drafting = null
+    state.viewing = null
     state.anchor = null
-    // Writing is a detour, not a destination: coming back from a card leaves
-    // picking armed so the next element is one click away — but a caller that
-    // already set another mode (setMode('idle') on Esc) must win.
-    if (state.mode === 'writing') state.mode = 'picking'
+    // Only the footer Mark button arms picking. Closing or saving a card
+    // returns the preview to normal interaction.
+    if (state.mode === 'writing') state.mode = 'idle'
     state.selected = null
     render()
     post('mode', { mode: state.mode, count: state.annotations.length })
+  }
+
+  function showComment(ann, el) {
+    setMode('idle')
+    state.viewing = ann.id
+    state.anchor = el
+    card = document.createElement('div')
+    card.className = 'dsa-card dsa-comment-card'
+    card.innerHTML =
+      '<header>' +
+      '<span class="dsa-tag dsa-mono">' + esc(String(state.annotations.indexOf(ann) + 1)) + '</span>' +
+      '<span class="dsa-clip dsa-mono">' + esc(ann.selector) + '</span>' +
+      '<button type="button" data-act="close" aria-label="' + esc(t('overlay.close')) + '">✕</button>' +
+      '</header>' +
+      '<div class="dsa-comment-text"></div>'
+    card.querySelector('.dsa-comment-text').textContent = ann.comment
+    card.querySelector('[data-act="close"]').addEventListener('click', closeCard)
+    root.appendChild(card)
+    renderPins()
+    anchorCard()
   }
 
   function openCard(draft, el) {
@@ -603,12 +621,15 @@
    *  rebuilt from the same draft, so nothing typed is lost. */
   function setLang(next) {
     if (!next || i18n.set(next) !== next) return
+    var viewed = state.viewing && state.annotations.find(function (ann) { return ann.id === state.viewing })
+    var viewedAnchor = state.anchor
     renderPins()
     render()
     if (card && state.drafting && state.anchor) {
       var draft = Object.assign({}, state.drafting, { comment: card.querySelector('textarea').value })
       openCard(draft, state.anchor)
     }
+    if (viewed && viewedAnchor) showComment(viewed, viewedAnchor)
   }
 
   function commit() {
@@ -644,15 +665,16 @@
   // ------------------------------------------------------------------ picking
 
   function pick(event) {
+    if (state.mode === 'writing') {
+      event.preventDefault()
+      event.stopPropagation()
+      closeCard()
+      return
+    }
+    if (state.mode !== 'picking') return
     if (state.busy) return
     var el = elementAt(event.clientX, event.clientY)
     if (!el) {
-      // Backdrop click while writing: treat it as cancel.
-      if (state.mode === 'writing' && card) {
-        event.preventDefault()
-        event.stopPropagation()
-        closeCard()
-      }
       return
     }
     event.preventDefault()
@@ -766,7 +788,11 @@
     event.preventDefault()
     setMode('idle')
   }, true)
+  window.addEventListener('click', function (event) {
+    if (state.viewing && card && !card.contains(event.target) && !pinLayer.contains(event.target)) closeCard()
+  }, true)
   window.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && state.viewing) { closeCard(); return }
     if (event.key === 'Escape' && !card) setMode('idle')
   }, true)
   /** Re-anchor stored annotations to their live elements: layout can shift

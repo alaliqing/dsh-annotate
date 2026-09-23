@@ -10,6 +10,8 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-23
+
 ### Added
 
 - `npm run test:harness` verifies a packed install, workspace preview and
@@ -18,6 +20,9 @@ is the 0.1.0 entry below.
 
 ### Fixed
 
+- Saving a comment now leaves annotation mode. Numbered markers show the saved
+  comment without opening the editor, and clicking elsewhere closes the comment
+  without starting another annotation.
 - Static previews identify each HTML document independently and preserve query
   strings and initial hash routes, keeping saved annotations on the correct page.
 - Absolute and protocol-relative redirects to the upstream app stay on the
@@ -108,5 +113,6 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.2]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.2
 [0.1.1]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.1
 [0.1.0]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.0

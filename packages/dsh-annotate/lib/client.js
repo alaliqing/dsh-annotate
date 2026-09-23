@@ -51,7 +51,7 @@ function dsaI18n(preferred) {
 
       // ---- injected overlay ------------------------------------------------
       'overlay.saveFailed': 'Annotations cannot be saved in this browser. Attach them to the composer before you navigate away.',
-      'overlay.editPin': 'Edit annotation {n}: {comment}',
+      'overlay.viewPin': 'View annotation {n}: {comment}',
       'overlay.close': 'Close',
       'overlay.placeholder': 'What should change here? (Shift+Enter for a new line)',
       'overlay.hint': 'Enter to save · Esc to cancel',
@@ -84,8 +84,8 @@ function dsaI18n(preferred) {
       'list.addressLabel': 'Local service address',
       'list.openButton': 'Open',
       'list.helpHeader': 'Annotate inside the preview',
-      'list.helpPicking': 'Press Mark below, then click an element in the page and write a note. Enter saves it.',
-      'list.helpEscape': 'Esc leaves annotation mode. Changing page or scrolling is unaffected — press Mark again whenever you want.',
+      'list.helpPicking': 'Press Mark below, then click an element in the page and write a note. Enter saves it and leaves annotation mode.',
+      'list.helpEscape': 'Esc leaves annotation mode. Press Mark again whenever you want to add another note.',
       'list.helpCmdClick': '⌘/Ctrl+click an element = save it and send immediately.',
       'list.helpSendHeader': 'The list and sending',
       'list.helpSendList': 'The annotations button in the toolbar opens an in-flow list for locating and deleting comments. It never covers the preview.',
@@ -193,7 +193,7 @@ function dsaI18n(preferred) {
 
       // ---- injected overlay ------------------------------------------------
       'overlay.saveFailed': '批注无法保存到浏览器，请在离开页面前加入输入框。',
-      'overlay.editPin': '编辑批注 {n}：{comment}',
+      'overlay.viewPin': '查看批注 {n}：{comment}',
       'overlay.close': '关闭',
       'overlay.placeholder': '写一句要改什么…（Shift+Enter 换行）',
       'overlay.hint': 'Enter 保存 · Esc 取消',
@@ -226,8 +226,8 @@ function dsaI18n(preferred) {
       'list.addressLabel': '本地服务地址',
       'list.openButton': '打开',
       'list.helpHeader': '在预览里标注',
-      'list.helpPicking': '点下面「标记」，然后点页面里的元素写批注，Enter 保存。',
-      'list.helpEscape': 'Esc 退出标注状态（换页面、滚动都不受影响，随时再点「标记」继续）。',
+      'list.helpPicking': '点下面「标注」，然后点页面里的元素写批注，Enter 保存并退出标注状态。',
+      'list.helpEscape': 'Esc 退出标注状态；要再添加批注时，重新点「标注」。',
       'list.helpCmdClick': '⌘/Ctrl+点击元素 = 写完立即发送。',
       'list.helpSendHeader': '批注列表与发送',
       'list.helpSendList': '顶部工具栏的「批注」按钮可展开列表，逐条定位或删除，不遮挡预览页面。',
