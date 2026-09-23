@@ -22,62 +22,32 @@
 ⌘/Ctrl ⇧ B → 选择本地应用 → 标记 → 点选 → 写批注 → 发送
 ```
 
-## 快速开始
-
-### 交给编程助手
+## 安装
 
 把下面这段话交给能访问 Harness 所在电脑的编程助手：
 
 ```text
-请阅读 https://github.com/alaliqing/dsh-annotate，并到 https://www.npmjs.com/package/dsh-annotate 核对已发布版本。
-按适用于该版本的安装说明，把插件装进本机 DeepSeek Harness 的 web profile。保留已有 profile 配置，不要中断当前 Harness 会话。
-验证插件已启用，报告检查结果，并告诉我如何重启 Harness、打开「标注」面板。
-如果仓库说明对应尚未发布的版本，请查阅匹配发布 tag 的 README。如果无法访问安装说明，请告知我，不要猜测步骤。
+阅读 https://github.com/alaliqing/dsh-annotate，按说明将最新已发布版本安装到本机 DeepSeek Harness 的 web profile。保留已有配置，不要中断当前 Harness 会话。验证安装结果，并说明如何重启 Harness、打开「标注」面板。
 ```
 
-### 手动安装
-
-需要 Node.js 20+、`dsh` CLI，以及 `PATH` 中可用的 pnpm。Chromium 是已通过
-完整测试的浏览器。如果你通过 `npx @deepseek-ai/dsh web` 启动 Harness，
-把下文命令中的 `dsh` 换成 `npx @deepseek-ai/dsh`。
+也可以手动安装，需要 Node.js 20+、`dsh` CLI 和 `PATH` 中可用的 pnpm：
 
 ```sh
 dsh plugin --profile web add dsh-annotate
 ```
 
-当前包会作为依赖安装，不会自动作为 Harness bundle 启用。打开
-`$DSH_HOME/profiles/web/cordis.patch.yml`（通常是
-`~/.dsh/profiles/web/cordis.patch.yml`），保留现有配置，增加以下条目；
-如果已经存在，就不要重复添加：
+当前版本还需要在 `$DSH_HOME/profiles/web/cordis.patch.yml`（默认
+`~/.dsh/profiles/web/cordis.patch.yml`）中启用。保留现有配置，只添加一次：
 
 ```yaml
 - insert:
     - name: dsh-annotate
 ```
 
-检查实际生效的配置：
-
-```sh
-dsh --profile web --dump-config
-```
-
-确认输出中出现 `dsh-annotate`，然后重启 web profile、刷新浏览器。
-打开一个对话，点击顶部的**标注**按钮，或按 `⌘/Ctrl⇧B`。
-如果正在 Harness 对话中安装，请先完成配置，再重启该会话。
-
-### 使用尚未发布的检出
-
-如果要使用尚未发布的检出，而不是 npm 包，把它链接进 profile：
-
-```sh
-git clone https://github.com/alaliqing/dsh-annotate.git
-cd "${DSH_HOME:-$HOME/.dsh}/profiles/web"
-npx --yes pnpm@10 add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
-```
-
-然后按上面的方式启用并检查配置。已用未发布检出的打包产物，在 Harness CLI
-`0.1.5-rc.2`、网页端和会话控制器 `0.1.5-rc.3` 上完成真实接入验证；这次验证
-没有安装 npm `0.1.1`。环境和验证边界见[兼容性记录](docs/compatibility.md)。
+用 `dsh --profile web --dump-config` 确认输出中出现 `dsh-annotate`。
+重启 web profile、刷新浏览器后，点击**标注**或按 `⌘/Ctrl⇧B`。
+如果使用 `npx @deepseek-ai/dsh web`，把上述命令中的 `dsh` 换成
+`npx @deepseek-ai/dsh`。已测试版本和限制见[兼容性记录](docs/compatibility.md)。
 
 ## 核心能力
 
@@ -178,6 +148,14 @@ npm ci
 npx playwright install chromium
 npm run check
 npm test
+```
+
+要使用尚未发布的检出，可链接进 web profile，然后按上面的说明启用：
+
+```sh
+git clone https://github.com/alaliqing/dsh-annotate.git
+cd "${DSH_HOME:-$HOME/.dsh}/profiles/web"
+npx --yes pnpm@10 add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
 ```
 
 默认测试会在 Chromium 中驱动真实的 client、shim 和 overlay 构建产物，使用 Harness

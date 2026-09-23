@@ -23,67 +23,35 @@ whole review to your conversation as structured text.
 ⌘/Ctrl ⇧ B → choose a local app → Mark → click → comment → send
 ```
 
-## Quick start
+## Install
 
-### Ask your coding agent
-
-Copy this into an agent with access to the machine running Harness:
+Give a coding agent this prompt:
 
 ```text
-Read https://github.com/alaliqing/dsh-annotate and check the published version at https://www.npmjs.com/package/dsh-annotate.
-Follow the installation instructions for that version to install the plugin into my local DeepSeek Harness web profile. Preserve existing profile configuration and do not interrupt this Harness session.
-Verify that the plugin is enabled, report what you checked, and tell me how to restart Harness and open Annotate.
-If the repository instructions describe an unreleased version, consult the README at the matching release tag. If you cannot access the instructions, tell me instead of guessing.
+Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the local DeepSeek Harness web profile. Preserve existing configuration and do not stop the current Harness session. Verify the installation, then explain how to restart Harness and open Annotate.
 ```
 
-### Install manually
-
-You need Node.js 20+, the `dsh` CLI, and pnpm on `PATH`. Chromium is the
-browser validated by the full test suite. If you launch Harness with
-`npx @deepseek-ai/dsh web`, replace `dsh` in the commands below with
-`npx @deepseek-ai/dsh`.
+Or install manually with Node.js 20+, the `dsh` CLI, and pnpm on `PATH`:
 
 ```sh
 dsh plugin --profile web add dsh-annotate
 ```
 
-The current package installs as a dependency; it does not enable itself as a
-Harness bundle. Open `$DSH_HOME/profiles/web/cordis.patch.yml` (normally
-`~/.dsh/profiles/web/cordis.patch.yml`) and add this entry without replacing
-existing entries or adding it twice:
+The current package needs a profile entry in
+`$DSH_HOME/profiles/web/cordis.patch.yml` (default
+`~/.dsh/profiles/web/cordis.patch.yml`). Keep existing entries and add this only
+once:
 
 ```yaml
 - insert:
     - name: dsh-annotate
 ```
 
-Check the effective configuration:
-
-```sh
-dsh --profile web --dump-config
-```
-
-Confirm that the output includes `dsh-annotate`. Restart the web profile and
-refresh the browser, then open a conversation and click **Annotate** in its
-header or press `⌘/Ctrl⇧B`. If you are installing from a Harness conversation,
-finish the configuration before restarting that session.
-
-### Use an unreleased checkout
-
-To run an unreleased checkout instead of the npm package, link it into the
-profile:
-
-```sh
-git clone https://github.com/alaliqing/dsh-annotate.git
-cd "${DSH_HOME:-$HOME/.dsh}/profiles/web"
-npx --yes pnpm@10 add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
-```
-
-Then follow the same activation and verification steps above. A packed
-unreleased checkout passed a native check with Harness CLI `0.1.5-rc.2`, web app
-and session controller `0.1.5-rc.3`; that check did not install npm `0.1.1`.
-See the [compatibility record](docs/compatibility.md) for the environment and
-validation limits.
+Check for `dsh-annotate` with `dsh --profile web --dump-config`. Restart the web
+profile and refresh the browser, then click **Annotate** or press `⌘/Ctrl⇧B`.
+If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
+`npx @deepseek-ai/dsh`. See [compatibility](docs/compatibility.md) for tested
+versions and limits.
 
 ## What it gives you
 
@@ -201,6 +169,15 @@ npm ci
 npx playwright install chromium
 npm run check
 npm test
+```
+
+To use an unreleased checkout, link it into the web profile and then add the
+profile entry shown above:
+
+```sh
+git clone https://github.com/alaliqing/dsh-annotate.git
+cd "${DSH_HOME:-$HOME/.dsh}/profiles/web"
+npx --yes pnpm@10 add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
 ```
 
 The default tests drive the real built client, shim, and overlay in Chromium
