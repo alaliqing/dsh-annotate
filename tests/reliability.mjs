@@ -29,6 +29,7 @@ const fixtureJs = `(function(){const process={env:{NODE_ENV:'production'}};const
 const routes = [], dispose = []
 apply({ effect(fn) { const clean = fn(); if (typeof clean === 'function') dispose.push(clean) }, webServer: { register: r => { routes.push(r) }, registerUpgrade() {} }, timer: {}, subprocess: {} }, { detect: { staticPorts: false } })
 const app = http.createServer((req, res) => {
+  if (req.url === '/absolute-redirect') { res.writeHead(302, { location: `http://127.0.0.1:${app.address().port}/destination?from=redirect#ready` }); res.end(); return }
   if (req.url.startsWith('/echo')) { res.setHeader('content-type','application/json'); res.end(JSON.stringify({ cookie:req.headers.cookie || '', url:req.url })); return }
   res.setHeader('content-type','text/html; charset=utf-8')
   res.end(`<!doctype html><html><head><title>Review test</title><style>body{margin:0;font:14px system-ui;background:#f6f7f8;color:#202833}main{padding:28px}h1{font-size:25px}.scroller{height:240px;overflow:auto;border:1px solid #ccd3db;background:white;padding:20px}.spacer{height:75px}button{padding:12px 18px;background:#fff;border:1px solid #aab5c2;border-radius:8px}#after{height:1500px}</style></head><body><main><h1>Review workspace</h1><p>Real DOM, nested scrolling and route state</p><div class="scroller"><div class="spacer"></div><button class="hover:bg-blue-500 w-1/2" id="target:one">Review this element</button><div style="height:700px"></div></div><p><button id="route">Open second page</button></p><input id="draft" placeholder="Keep this form value"><div id="after"></div></main><script>document.querySelector('#route').onclick=()=>history.pushState({},'','/second?view=2#details')</script></body></html>`)
@@ -59,6 +60,7 @@ try {
   // index.html at its root, and a file that must not be previewable.
   const workspace = mkdtempSync(join(tmpdir(),'anno-workspace-'))
   writeFileSync(join(workspace,'index.html'),'<!doctype html><html><head><title>静态页面</title></head><body><h1 id="static-page">项目内的静态页面</h1><script src="./app.js"></script></body></html>')
+  writeFileSync(join(workspace,'other.html'),'<!doctype html><html><head><title>第二个静态页面</title></head><body><h1 id="static-page">另一个文件</h1></body></html>')
   writeFileSync(join(workspace,'app.js'),'window.__STATIC_FIXTURE__=true')
   writeFileSync(join(workspace,'notes.txt'),'not a page\n')
   writeFileSync(join(workspace,'package.json'),JSON.stringify({name:'anno-workspace',scripts:{dev:'vite --port '+app.address().port}}))
@@ -232,6 +234,62 @@ try {
   assert.equal(await staticFrame.evaluate(()=>document.querySelector('#static-page').textContent),'项目内的静态页面')
   assert.equal(await staticFrame.evaluate(()=>window.__STATIC_FIXTURE__),true)
   assert((await page.locator('.dsa-url').inputValue()).startsWith('file://'));pass('a listed static page opens, keeps its file address and runs its relative script')
+  const openStatic = async (url) => {
+    await page.locator('.dsa-url').fill(url)
+    await page.locator('.dsa-url').press('Enter')
+    await page.waitForFunction(url => {
+      const input = document.querySelector('.dsa-url')
+      return input?.value === url && !document.querySelector('.dsa-empty')
+    }, url)
+    const preview = page.frames().find(f => f !== page.mainFrame())
+    await preview.waitForFunction(url => window.__dshAnnoState?.().url === url && window.__dshAnnotateReady, url)
+    return preview
+  }
+  const saveStatic = async (preview, comment) => {
+    const marking = page.locator('button[title^="标记模式"]')
+    if (await marking.getAttribute('aria-pressed') === 'false') await marking.click()
+    await preview.locator('#static-page').click({force:true})
+    await preview.locator('.dsa-card textarea').fill(comment)
+    await preview.locator('.dsa-card textarea').press('Enter')
+    await preview.waitForFunction(comment => document.querySelector('.dsa-pin')?.title === comment, comment)
+  }
+  const firstRoute = staticUrl + '?view=1#/first'
+  let staticPage = await openStatic(firstRoute)
+  assert.equal(await staticPage.evaluate(() => location.hash), '#/first')
+  await saveStatic(staticPage, '第一个文件的批注')
+  const secondRoute = 'file://' + join(workspace, 'other.html') + '?view=2#/second'
+  staticPage = await openStatic(secondRoute)
+  assert.equal(await staticPage.locator('#static-page').textContent(), '另一个文件')
+  assert.equal(await staticPage.locator('.dsa-pin').count(), 0)
+  await saveStatic(staticPage, '第二个文件的批注')
+  staticPage = await openStatic(firstRoute)
+  await staticPage.waitForFunction(() => document.querySelector('.dsa-pin')?.title === '第一个文件的批注')
+  await staticPage.evaluate(() => { location.hash = '#/another' })
+  await page.waitForFunction(url => document.querySelector('.dsa-url')?.value === url, staticUrl + '?view=1#/another')
+  await staticPage.waitForFunction(() => !document.querySelector('.dsa-pin'))
+  await staticPage.evaluate(() => { location.hash = '#/first' })
+  await staticPage.waitForFunction(() => document.querySelector('.dsa-pin')?.title === '第一个文件的批注')
+  pass('static files, query strings and hash routes restore only their own annotations')
+  const releasedUrl = staticPage.url()
+  await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/__dsh-annotate/api') && response.request().postDataJSON()?.method === 'releasePreview'),
+    page.locator('button[title="回到本地服务列表"]').click(),
+  ])
+  await assert.rejects(fetch(releasedUrl))
+  await page.locator('.dsa-file').first().click()
+  await page.waitForFunction(() => document.querySelector('iframe') && !document.querySelector('.dsa-empty'))
+  staticPage = await openStatic(firstRoute)
+  await staticPage.waitForFunction(() => document.querySelector('.dsa-pin')?.title === '第一个文件的批注')
+  pass('closing and reopening a panel releases its listener and restores saved annotations')
+  await page.locator('.dsa-url').fill(upstream + '/absolute-redirect')
+  await page.locator('.dsa-url').press('Enter')
+  await page.waitForFunction(url => document.querySelector('.dsa-url')?.value === url && !document.querySelector('.dsa-empty'), upstream + '/destination?from=redirect#ready')
+  frame = page.frames().find(f => f.url().includes('/destination'))
+  assert(frame && new URL(frame.url()).hostname === 'localhost')
+  await pick('跳转后仍可标注')
+  await frame.locator('.dsa-card textarea').press('Enter')
+  await frame.waitForFunction(() => document.querySelector('.dsa-pin')?.title === '跳转后仍可标注')
+  pass('absolute redirects keep the live overlay and element picking')
   await page.locator('.dsa-url').fill('http://127.0.0.1:1/');await page.locator('.dsa-url').press('Enter')
   await page.waitForFunction(()=>document.querySelector('.dsa-empty')?.textContent.includes('预览暂时不可用'))
   assert(await page.getByRole('button',{name:'重试',exact:true}).isVisible());pass('unavailable service shows error and retry')

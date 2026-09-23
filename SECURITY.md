@@ -17,8 +17,9 @@ machines or to the public internet.
 - Host API writes are rejected unless they come from the harness's own origin.
 - Preview pages run on a dedicated loopback origin, so they cannot read harness
   DOM or harness web storage.
-- Non-prefixed cookies and `Authorization` are stripped in the direction where
-  they would leak across origins.
+- App cookies are namespaced; unprefixed cookies are not forwarded. The optional
+  `dsh-app-bridge` strips cookies and `Authorization` by default because it shares
+  the Harness origin. Isolated previews preserve the app's HTTP authorization.
 - No untrusted certificate is ever accepted silently: an HTTPS upstream with an
   untrusted certificate fails visibly.
 
@@ -26,8 +27,8 @@ machines or to the public internet.
 
 These are documented product boundaries, not undisclosed gaps:
 
-- Same-origin-style proxying via `legacyProxy: true` is an explicit opt-in and
-  has weaker isolation than the default preview origin.
+- The separate `dsh-app-bridge` package mounts trusted apps on the Harness origin
+  and has weaker isolation than `dsh-annotate`'s default preview origin.
 - An app you have chosen to preview is trusted code running in your browser, with
   the same access any page on that origin would have.
 - Shadow DOM internals and cross-origin child frames are not selectable.

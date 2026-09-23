@@ -8,6 +8,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 this repository, and the release workflow no longer publishes it. Its history
 is the 0.1.0 entry below.
 
+## [Unreleased]
+
+### Added
+
+- `npm run test:harness` verifies a packed install, workspace preview and
+  annotation delivery through the real Harness using a local model fixture.
+- A compatibility record names the verified CLI and resolved runtime versions.
+
+### Fixed
+
+- Static previews identify each HTML document independently and preserve query
+  strings and initial hash routes, keeping saved annotations on the correct page.
+- Absolute and protocol-relative redirects to the upstream app stay on the
+  preview origin and retain the annotation overlay.
+- Preview leases release listeners when panels close or switch apps, preserve
+  other windows' active previews, and reclaim abandoned previews after inactivity.
+  Sequential sessions no longer exhaust a cumulative 24-preview limit.
+- Internal static servers no longer appear as detected development services;
+  concurrent requests share one static server and unused servers are closed.
+- Corrected the security policy's retired configuration reference, the issue
+  template's architecture link, and the installation requirements.
+
 ## [0.1.1] - 2026-09-22
 
 ### Changed

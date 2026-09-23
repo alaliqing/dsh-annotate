@@ -384,6 +384,7 @@ function apply(ctx) {
           loading: false,
           error: null,
           previewOrigin: '',
+          previewLease: '',
           width: 'fit',
           pending: [],
           notice: null,
@@ -483,8 +484,12 @@ function apply(ctx) {
     const request = (panel.openRequest || 0) + 1
     panel.openRequest = request
     panel.model.set({ loading: true, error: null, view: 'page', input: url })
-    const preview = await api('preview', { sid: panel.sid, url, root: panel.model.get().root })
-    if (panel.openRequest !== request) return false
+    const lease = crypto.randomUUID()
+    const preview = await api('preview', { sid: panel.sid, url, root: panel.model.get().root, lease })
+    if (panel.openRequest !== request) {
+      if (preview.ok) void api('releasePreview', { sid: panel.sid, origin: preview.origin, lease })
+      return false
+    }
     if (!preview.ok) {
       panel.model.set({ loading: false, error: hostMessage(preview, 'notice.previewFailed') })
       return false
@@ -497,6 +502,7 @@ function apply(ctx) {
       input: url,
       src: preview.url,
       previewOrigin: preview.origin,
+      previewLease: lease,
       history: history.slice(-40),
       index: Math.min(history.length - 1, 39),
       mode: 'idle',
@@ -627,12 +633,37 @@ function apply(ctx) {
         const hostState = await api('state', { sid: sessionId })
         if (cancelled) return
         if (!hostState?.ok) { panel.model.set({ detect: 'error' }); flash(panel, t('notice.pluginUnavailable')); return }
-        if (!panel.model.get().url) await runDetect(panel, { auto: true })
+        const current = panel.model.get()
+        if (!current.url) await runDetect(panel, { auto: true })
+        else if (current.view === 'page') await openUpstream(panel, current.url, { push: false })
       })()
       return () => {
         cancelled = true
+        panel.openRequest = (panel.openRequest || 0) + 1
+        panel.model.set({ src: '', previewOrigin: '', previewLease: '' })
       }
     }, [panel, sessionId])
+
+    React.useEffect(() => {
+      if (state.view !== 'page' || !state.previewLease) return undefined
+      const args = { sid: panel.sid, origin: state.previewOrigin, lease: state.previewLease }
+      let cancelled = false
+      const retain = async () => {
+        const result = await api('retainPreview', args)
+        // A suspended tab may outlive its lease; reopening restores annotations
+        // from the Harness origin instead of leaving a dead iframe behind.
+        if (!result.ok && !cancelled) await openUpstream(panel, panel.model.get().url, { push: false })
+      }
+      const timer = setInterval(retain, 30_000)
+      const onVisible = () => { if (!document.hidden) void retain() }
+      document.addEventListener('visibilitychange', onVisible)
+      return () => {
+        cancelled = true
+        clearInterval(timer)
+        document.removeEventListener('visibilitychange', onVisible)
+        void api('releasePreview', args)
+      }
+    }, [panel, state.view, state.previewOrigin, state.previewLease])
 
     React.useEffect(() => {
       panel.draftWriter = {
@@ -739,7 +770,7 @@ function apply(ctx) {
     }
 
     const showList = () => {
-      panel.model.set({ view: 'list', mode: 'idle', notice: null, loading: false, error: null, listOpen: false, helpOpen: false })
+      panel.model.set({ view: 'list', src: '', previewOrigin: '', previewLease: '', mode: 'idle', notice: null, loading: false, error: null, listOpen: false, helpOpen: false })
       panel.openRequest = (panel.openRequest || 0) + 1
       notify('set-mode', { mode: 'idle' })
       void runDetect(panel, { auto: false })

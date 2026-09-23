@@ -17,7 +17,7 @@ build, test, and land a change.
 npm ci
 npx playwright install chromium
 npm run check   # builds lib/ and syntax-checks every source file
-npm test        # distribution + browser regression suite
+npm test        # distribution + preview lifecycle + browser regression suite
 ```
 
 For a live harness instead of the fixture, see the
@@ -55,6 +55,8 @@ those files directly, so an install needs no build step.
 | `packages/dsh-app-bridge/lib/index.js` | Standalone fixed-mount reverse proxy |
 | `scripts/dev.mjs` | One-command local harness development loop |
 | `tests/reliability.mjs` | The assertion-based browser suite (the acceptance gate) |
+| `tests/preview.mjs` | Real HTTP tests for redirects, static identity, preview leases and resource cleanup |
+| `tests/harness.mjs` | Optional packed-install check against the real Harness, with a local model fixture |
 | `tests/distribution.mjs` | Asserts the published tarball contains every runtime file |
 | `examples/demo-app/` | Zero-dependency fixture app used by the dev loop |
 
@@ -84,8 +86,8 @@ should be mirrored in the other in the same pull request. `CONTRIBUTING.md`,
 
 ## Testing expectations
 
-- Every behaviour change needs an assertion in `tests/reliability.mjs`, or a
-  clear reason why it cannot be covered (native harness loading, for example).
+- Every behaviour change needs an assertion in the relevant browser, preview or
+  native Harness suite, or a clear reason why it cannot be covered.
 - Never assert on a fixed delay for something the browser animates. Wait for
   the state you expect — see the `settled()` helper for marker geometry.
 - The suite must own and close every listener and browser it opens.
@@ -94,8 +96,10 @@ should be mirrored in the other in the same pull request. `CONTRIBUTING.md`,
 
 Two environment escapes exist for unusual setups: `REVIEW_NODE_MODULES` points
 at another install's `node_modules`, and `PLAYWRIGHT_MODULE` at Playwright
-itself. The suite never calls a real model: the React fixture simulates session
-acceptance and rejection, and native harness loading stays a manual step.
+itself. The default suite never calls a real model: the React fixture simulates
+session acceptance and rejection. `npm run test:harness` separately verifies
+installation and submission in the real Harness with a local model endpoint.
+It requires `dsh` (or `DSH_CLI`) and pnpm; see [the compatibility record](docs/compatibility.md).
 
 ### Documentation screenshots
 
