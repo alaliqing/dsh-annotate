@@ -40,8 +40,9 @@ whole review to your conversation as structured text.
   upgrades without sharing the Harness origin.
 - **English and Chinese UI**, switchable from the toolbar.
 
-No screenshot is captured, no style is changed, and the plugin never starts or
-stops your development server.
+No screenshot is captured and no app style is changed. By default, the plugin
+only discovers servers you already run; process control requires an explicitly
+configured command.
 
 ## Install
 
@@ -51,8 +52,12 @@ Hand this line to your coding agent, or run it yourself:
 Install dsh-annotate: dsh plugin --profile web add dsh-annotate, then add it to the profile's cordis.patch.yml and restart dsh web.
 ```
 
-Requirements: a restartable DeepSeek Harness web client, Node.js 20+, and
-Chromium (the validated browser).
+Requirements: a restartable DeepSeek Harness web client, Node.js 20+, pnpm on
+`PATH` (used by `dsh plugin`), and Chromium (the validated browser).
+
+Verified with Harness CLI `0.1.5-rc.2`, web app and session controller
+`0.1.5-rc.3`. See [compatibility and native acceptance checks](docs/compatibility.md)
+for the exact environment and validation limits.
 
 ```sh
 dsh plugin --profile web add dsh-annotate
@@ -130,7 +135,10 @@ ephemeral loopback origin and injects a small shim and picking overlay.
   directory on a loopback origin: `GET`/`HEAD` only, nothing outside the
   workspace, no dotfiles, and a 64 MiB ceiling per file.
 - App cookies are namespaced; unprefixed cookies are stripped both ways.
-- Preview servers and sockets close when the plugin is disposed.
+- Closing a panel, returning to the service list, or switching apps releases its
+  preview. Other windows using the same preview keep it alive. Abandoned previews
+  expire after five minutes without activity or a renewed lease; plugin disposal
+  closes all remaining servers and sockets.
 
 This is a local development tool, not a browser sandbox. OAuth flows, strict
 origin allowlists, service workers, restrictive CSP, Shadow DOM internals,
@@ -169,9 +177,11 @@ npm run check
 npm test
 ```
 
-The tests drive the real built client, shim, and overlay in Chromium; no model
-is called. Generated files under `packages/dsh-annotate/lib/` are committed and
-must stay in sync with their sources.
+The default tests drive the real built client, shim, and overlay in Chromium
+against a Harness fixture; no model is called. `npm run test:harness` separately
+checks a packed install in a real, isolated Harness with a local model fixture.
+Generated files under `packages/dsh-annotate/lib/` are committed and must stay in
+sync with their sources.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for repository conventions and
 [SECURITY.md](SECURITY.md) for private vulnerability reporting.

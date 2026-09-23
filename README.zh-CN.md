@@ -35,7 +35,8 @@
 - **彼此隔离的预览：** 保留应用路由、资源、fetch 和 WebSocket，同时不与 Harness 共用源。
 - **中英双语界面**，可在工具栏切换。
 
-插件不会截图、不会修改页面样式，也不会替你启动或结束开发服务器。
+插件不会截图，也不会修改应用样式。默认只发现你已经运行的服务器；只有显式配置了
+启动命令，才会启用进程控制。
 
 ## 安装
 
@@ -45,8 +46,11 @@
 安装 dsh-annotate：dsh plugin --profile web add dsh-annotate，然后写入该 profile 的 cordis.patch.yml 并重启 dsh web。
 ```
 
-需要可重启的 DeepSeek Harness 网页客户端、Node.js 20+，以及 Chromium
-（目前完成完整验证的浏览器）。
+需要可重启的 DeepSeek Harness 网页客户端、Node.js 20+、`PATH` 中可用的 pnpm
+（供 `dsh plugin` 使用），以及 Chromium（目前完成完整验证的浏览器）。
+
+已验证 Harness CLI `0.1.5-rc.2`，网页端与会话控制器 `0.1.5-rc.3`。
+具体环境及验证边界见[兼容性与真实 Harness 验收](docs/compatibility.md)。
 
 ```sh
 dsh plugin --profile web add dsh-annotate
@@ -118,7 +122,8 @@ React 组件名需要开发构建才能可靠获取；可见文本最多保留 1
 - 静态页面由插件自身以只读方式、在所在目录上以回环源提供：仅允许 `GET`/`HEAD`，
   不越出工作区，不提供点文件，单文件上限 64 MiB。
 - 应用 cookie 带独立命名空间；没有前缀的 cookie 会在两个方向都被移除。
-- 插件销毁时一并关闭预览服务和 socket。
+- 关闭面板、返回服务列表或切换应用时会释放对应预览；其他窗口仍在使用的预览会保留。
+  异常退出后，五分钟没有活动或续期的预览会被回收；插件销毁时关闭所有剩余服务和 socket。
 
 这是本地开发工具，不是浏览器沙箱。OAuth、严格源白名单、Service Worker、限制性 CSP、
 Shadow DOM 内部、跨源子 frame 和 Canvas 内部对象，可能需要正常浏览器或应用专门配置。
@@ -153,8 +158,10 @@ npm run check
 npm test
 ```
 
-测试会在 Chromium 中驱动真实的 client、shim 和 overlay 构建产物，不会调用模型。
-`packages/dsh-annotate/lib/` 下的生成文件会提交到仓库，必须与源码保持同步。
+默认测试会在 Chromium 中驱动真实的 client、shim 和 overlay 构建产物，使用 Harness
+测试替身，不调用模型。`npm run test:harness` 则在独立的真实 Harness 中安装打包产物，
+使用本地模型替身验证完整接入。`packages/dsh-annotate/lib/` 下的生成文件会提交到仓库，
+必须与源码保持同步。
 
 仓库约定见 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题请按
 [SECURITY.md](SECURITY.md) 私下报告。

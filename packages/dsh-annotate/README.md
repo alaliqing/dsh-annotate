@@ -61,8 +61,13 @@ package, so there is no build step.
 ## Requirements
 
 - Node.js 20 or newer.
+- pnpm on `PATH` for `dsh plugin`.
 - A restartable DeepSeek Harness web client.
 - Chromium is the validated browser.
+
+Verified with Harness CLI `0.1.5-rc.2`, web app and session controller
+`0.1.5-rc.3`. See the [compatibility record](https://github.com/alaliqing/dsh-annotate/blob/main/docs/compatibility.md)
+for the exact environment and the repeatable native acceptance check.
 
 Local development only: proxy targets are restricted to loopback, so a remote
 harness or a public deployment is out of scope.

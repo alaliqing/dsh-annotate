@@ -150,7 +150,7 @@ function dsaI18n(preferred) {
       'host.notAllowedFile': 'Only an HTML file inside this workspace can be previewed as a file.',
       'host.notHtmlFile': 'Only .html and .htm files can be opened as a static page.',
       'host.staticUnavailable': 'That file is no longer available in this workspace.',
-      'host.tooManyPreviews': 'Too many previews are open. Restart the plugin to release the idle ones.',
+      'host.tooManyPreviews': 'Too many previews are active. Close another preview and retry.',
       'host.noCommand': 'No start command is configured (this is an optional feature).',
       'host.noRoot': 'The workspace directory is unknown, so no dev server can be started.',
       'host.starting': 'A service for this workspace is already starting. Please wait.',
@@ -292,7 +292,7 @@ function dsaI18n(preferred) {
       'host.notAllowedFile': '只能预览当前工作区内、属于本项目的 HTML 文件。',
       'host.notHtmlFile': '静态预览只支持 .html / .htm 文件。',
       'host.staticUnavailable': '该文件在当前工作区中已不可用。',
-      'host.tooManyPreviews': '预览数量已达上限，请重启插件释放闲置预览。',
+      'host.tooManyPreviews': '正在使用的预览已达上限，请关闭其他预览后重试。',
       'host.noCommand': '未配置启动命令（可选功能）',
       'host.noRoot': '不知道工作区目录，无法启动 dev server',
       'host.starting': '当前工作区的服务正在启动，请稍候。',
@@ -757,6 +757,7 @@ function apply(ctx) {
           loading: false,
           error: null,
           previewOrigin: '',
+          previewLease: '',
           width: 'fit',
           pending: [],
           notice: null,
@@ -856,8 +857,12 @@ function apply(ctx) {
     const request = (panel.openRequest || 0) + 1
     panel.openRequest = request
     panel.model.set({ loading: true, error: null, view: 'page', input: url })
-    const preview = await api('preview', { sid: panel.sid, url, root: panel.model.get().root })
-    if (panel.openRequest !== request) return false
+    const lease = crypto.randomUUID()
+    const preview = await api('preview', { sid: panel.sid, url, root: panel.model.get().root, lease })
+    if (panel.openRequest !== request) {
+      if (preview.ok) void api('releasePreview', { sid: panel.sid, origin: preview.origin, lease })
+      return false
+    }
     if (!preview.ok) {
       panel.model.set({ loading: false, error: hostMessage(preview, 'notice.previewFailed') })
       return false
@@ -870,6 +875,7 @@ function apply(ctx) {
       input: url,
       src: preview.url,
       previewOrigin: preview.origin,
+      previewLease: lease,
       history: history.slice(-40),
       index: Math.min(history.length - 1, 39),
       mode: 'idle',
@@ -1000,12 +1006,37 @@ function apply(ctx) {
         const hostState = await api('state', { sid: sessionId })
         if (cancelled) return
         if (!hostState?.ok) { panel.model.set({ detect: 'error' }); flash(panel, t('notice.pluginUnavailable')); return }
-        if (!panel.model.get().url) await runDetect(panel, { auto: true })
+        const current = panel.model.get()
+        if (!current.url) await runDetect(panel, { auto: true })
+        else if (current.view === 'page') await openUpstream(panel, current.url, { push: false })
       })()
       return () => {
         cancelled = true
+        panel.openRequest = (panel.openRequest || 0) + 1
+        panel.model.set({ src: '', previewOrigin: '', previewLease: '' })
       }
     }, [panel, sessionId])
+
+    React.useEffect(() => {
+      if (state.view !== 'page' || !state.previewLease) return undefined
+      const args = { sid: panel.sid, origin: state.previewOrigin, lease: state.previewLease }
+      let cancelled = false
+      const retain = async () => {
+        const result = await api('retainPreview', args)
+        // A suspended tab may outlive its lease; reopening restores annotations
+        // from the Harness origin instead of leaving a dead iframe behind.
+        if (!result.ok && !cancelled) await openUpstream(panel, panel.model.get().url, { push: false })
+      }
+      const timer = setInterval(retain, 30_000)
+      const onVisible = () => { if (!document.hidden) void retain() }
+      document.addEventListener('visibilitychange', onVisible)
+      return () => {
+        cancelled = true
+        clearInterval(timer)
+        document.removeEventListener('visibilitychange', onVisible)
+        void api('releasePreview', args)
+      }
+    }, [panel, state.view, state.previewOrigin, state.previewLease])
 
     React.useEffect(() => {
       panel.draftWriter = {
@@ -1112,7 +1143,7 @@ function apply(ctx) {
     }
 
     const showList = () => {
-      panel.model.set({ view: 'list', mode: 'idle', notice: null, loading: false, error: null, listOpen: false, helpOpen: false })
+      panel.model.set({ view: 'list', src: '', previewOrigin: '', previewLease: '', mode: 'idle', notice: null, loading: false, error: null, listOpen: false, helpOpen: false })
       panel.openRequest = (panel.openRequest || 0) + 1
       notify('set-mode', { mode: 'idle' })
       void runDetect(panel, { auto: false })

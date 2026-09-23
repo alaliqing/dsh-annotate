@@ -50,6 +50,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run test:distribution
+      - run: npm run test:preview
       - run: npx playwright install --with-deps chromium
       - run: npm run test:reliability
       - name: is this version already published?

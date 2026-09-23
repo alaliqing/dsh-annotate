@@ -37,6 +37,7 @@ const DEFAULT_BASE = '/app'
 const DEFAULT_COMMAND = 'npm run dev:panel'
 const WS_RELAY_PATH = '/__dsh_anno_ws'
 const LOG_LIMIT = 400
+const PREVIEW_IDLE_MS = 5 * 60_000
 
 /** Ports people actually run dev servers on, probed even when the OS tells us
  *  nothing (no lsof, locked-down container). */
@@ -574,32 +575,71 @@ export function apply(ctx, config = {}) {
   const staticFiles = config.detect?.staticFiles !== false
   const detections = new Map()
   const previews = new Map()
+  const previewActivity = new Map()
   const staticServers = new Map()
-  ctx.effect(() => () => { for (const promise of previews.values()) void promise.then((entry) => { entry.close() }).catch(() => {}) })
-  ctx.effect(() => () => { for (const entry of staticServers.values()) entry.close() })
+  let disposed = false
+
+  const closeUnusedStatic = (dir) => {
+    if (!dir || [...previewActivity.values()].some((entry) => entry.dir === dir)) return
+    const promise = staticServers.get(dir)
+    staticServers.delete(dir)
+    if (promise) void promise.then((entry) => entry.close()).catch(() => {})
+  }
+  const closePreview = (key) => {
+    const promise = previews.get(key)
+    const activity = previewActivity.get(key)
+    previews.delete(key)
+    previewActivity.delete(key)
+    if (promise) void promise.then((entry) => entry.close()).catch(() => {})
+    closeUnusedStatic(activity?.dir)
+  }
+  const reapPreviews = () => {
+    const now = Date.now()
+    for (const [key, activity] of previewActivity) {
+      for (const [lease, until] of activity.leases) {
+        if (until <= now) activity.leases.delete(lease)
+      }
+      if (!activity.leases.size && now - activity.at >= PREVIEW_IDLE_MS) closePreview(key)
+    }
+  }
+  ctx.effect(() => {
+    const timer = setInterval(reapPreviews, 30_000)
+    timer.unref?.()
+    return () => {
+      disposed = true
+      clearInterval(timer)
+      for (const key of previews.keys()) closePreview(key)
+      for (const dir of staticServers.keys()) closeUnusedStatic(dir)
+    }
+  })
 
   /** One read-only file server per directory, started the first time a page in
    *  it is previewed. It exists so a static file has a loopback origin for the
    *  proxy to read: an iframe cannot be injected through `file://`. */
   const staticServer = async (dir) => {
-    let entry = staticServers.get(dir)
-    if (!entry) {
-      const server = http.createServer((req, res) => {
-        // Only the exact address this server bound may read it, so a
-        // DNS-rebinding page cannot reach the workspace through this origin.
-        if (req.headers.host !== `127.0.0.1:${server.address().port}`) { res.writeHead(403); res.end(); return }
-        void serveStatic(req, res, dir).catch((error) => {
-          void error
-          try { res.destroy() } catch (inner) { void inner }
+    let promise = staticServers.get(dir)
+    if (!promise) {
+      promise = (async () => {
+        const server = http.createServer((req, res) => {
+          // Only the exact address this server bound may read it, so a
+          // DNS-rebinding page cannot reach the workspace through this origin.
+          if (req.headers.host !== `127.0.0.1:${server.address().port}`) { res.writeHead(403); res.end(); return }
+          void serveStatic(req, res, dir).catch((error) => {
+            void error
+            try { res.destroy() } catch (inner) { void inner }
+          })
         })
-      })
-      const sockets = new Set()
-      server.on('connection', (socket) => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)) })
-      await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })
-      entry = { origin: `http://127.0.0.1:${server.address().port}`, close() { for (const socket of sockets) socket.destroy(); server.close() } }
-      staticServers.set(dir, entry)
+        const sockets = new Set()
+        server.on('connection', (socket) => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)) })
+        await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })
+        const entry = { origin: `http://127.0.0.1:${server.address().port}`, close() { for (const socket of sockets) socket.destroy(); server.close() } }
+        if (disposed) entry.close()
+        return entry
+      })()
+      staticServers.set(dir, promise)
+      promise.catch(() => { if (staticServers.get(dir) === promise) staticServers.delete(dir) })
     }
-    return entry
+    return promise
   }
 
   const entryFor = (sid) => {
@@ -721,6 +761,7 @@ export function apply(ctx, config = {}) {
     const root = existingDirectory(args && args.root)
     const selfPort = hostPort(req.headers.host)
     const previewPorts = new Set((await Promise.all([...previews.values()])).map((entry) => Number(new URL(entry.origin).port)))
+    for (const entry of await Promise.all(staticServers.values())) previewPorts.add(Number(new URL(entry.origin).port))
     const { ports: found, pids } = await listeningPorts()
     const declared = await declaredProjectPorts(root)
     const cwds = await processCwds([...new Set(pids.values())])
@@ -763,6 +804,7 @@ export function apply(ctx, config = {}) {
       const method = body && body.method
       const args = (body && body.args) || {}
       const sid = args.sid
+      if (disposed) return send(res, 503, { ok: false, error: 'plugin is shutting down' })
       const entry = entryFor(sid)
       drain(entry)
       if (method === 'state') {
@@ -781,34 +823,65 @@ export function apply(ctx, config = {}) {
         })
       }
       if (method === 'preview') {
+        reapPreviews()
         const raw = String(args.url || '')
         let target
         let suffix
-        let page = null
+        let dir = null
+        let fileRoot = null
         if (/^file:/i.test(raw)) {
           const resolved = resolveFileTarget(raw, existingDirectory(args.root))
           if (resolved.code) return send(res, 400, { ok: false, code: resolved.code, error: 'that file cannot be previewed' })
           const server = await staticServer(resolved.dir)
+          dir = resolved.dir
           // The page's own directory is the static root, so its relative scripts
           // and styles resolve exactly as they do on disk.
           target = new URL(server.origin + '/')
-          suffix = '/' + encodeURIComponent(resolved.name)
-          page = raw
+          const fileUrl = new URL(raw)
+          fileRoot = new URL('.', fileUrl).href
+          suffix = '/' + encodeURIComponent(resolved.name) + fileUrl.search + fileUrl.hash
         } else {
           try { target = new URL(raw) } catch (error) { void error; target = null }
           if (!target || !isLocalTarget(target) || Number(target.port) === hostPort(req.headers.host)) return send(res, 400, { ok: false, code: 'notLocalTarget', error: 'local development services only; Harness itself cannot be previewed' })
           suffix = target.pathname + target.search + target.hash
         }
         const parentOrigin = requestOrigin(req)
-        const key = String(sid) + ':' + target.origin
+        const key = String(sid) + ':' + parentOrigin + ':' + target.origin + ':' + (fileRoot || '')
         if (!previews.has(key)) {
-          if (previews.size >= 24) return send(res, 429, { ok: false, code: 'tooManyPreviews', error: 'too many previews; restart the plugin to release the idle ones' })
-          const promise = createPreview(target, String(sid || ''), parentOrigin, page)
+          if (previews.size >= 24) {
+            closeUnusedStatic(dir)
+            return send(res, 429, { ok: false, code: 'tooManyPreviews', error: 'too many active previews; close another preview and retry' })
+          }
+          const activity = { at: Date.now(), leases: new Map(), dir, sid }
+          previewActivity.set(key, activity)
+          const promise = createPreview(target, String(sid || ''), parentOrigin, fileRoot, () => { activity.at = Date.now() })
           previews.set(key, promise)
-          promise.catch(() => previews.delete(key))
+          promise.catch(() => { if (previews.get(key) === promise) closePreview(key) })
         }
+        const activity = previewActivity.get(key)
+        activity.at = Date.now()
+        if (typeof args.lease === 'string' && args.lease) activity.leases.set(args.lease, Date.now() + PREVIEW_IDLE_MS)
         const entry = await previews.get(key)
+        if (disposed) { entry.close(); return send(res, 503, { ok: false, error: 'plugin is shutting down' }) }
         return send(res, 200, { ok: true, url: entry.origin + suffix, origin: entry.origin })
+      }
+      if (method === 'retainPreview' || method === 'releasePreview') {
+        for (const [key, promise] of previews) {
+          const activity = previewActivity.get(key)
+          if (activity?.sid !== sid || !activity.leases.has(args.lease)) continue
+          const preview = await promise
+          if (previews.get(key) !== promise || !activity.leases.has(args.lease)) continue
+          if (preview.origin !== args.origin) continue
+          if (method === 'releasePreview') {
+            activity.leases.delete(args.lease)
+            if (!activity.leases.size) closePreview(key)
+          } else {
+            activity.at = Date.now()
+            activity.leases.set(args.lease, Date.now() + PREVIEW_IDLE_MS)
+          }
+          return send(res, 200, { ok: true })
+        }
+        return send(res, 200, { ok: method === 'releasePreview' })
       }
       if (method === 'detect') return send(res, 200, await detect(sid, args, req))
       if (method === 'start') return send(res, 200, await start(sid, existingDirectory(args.root)))
@@ -955,8 +1028,14 @@ function proxyHttp(req, res, preview) {
           continue
         }
         if (lower === 'location' && typeof value === 'string') {
-          // Paths are preserved, so a same-origin redirect needs no rewrite.
-          out.location = value
+          // An absolute upstream redirect must stay on the preview origin or
+          // the next document will lose the shim and annotation overlay.
+          try {
+            const destination = new URL(value, origin + tail + search)
+            out.location = destination.origin === origin
+              ? destination.pathname + destination.search + destination.hash
+              : value
+          } catch { out.location = value }
           continue
         }
         out[key] = value
@@ -974,7 +1053,7 @@ function proxyHttp(req, res, preview) {
       upstreamRes.on('end', () => {
         const html = Buffer.concat(chunks).toString('utf8')
         const body = Buffer.from(
-          injectIntoHtml(html, { upstream: origin, page: preview.page, prefix: '/', relay: WS_RELAY_PATH, enc, isolated: true, parentOrigin: preview.parentOrigin, session: preview.sid }),
+          injectIntoHtml(html, { upstream: origin, page: preview.fileRoot ? new URL('.' + tail + search, preview.fileRoot).href : null, fileRoot: preview.fileRoot, prefix: '/', relay: WS_RELAY_PATH, enc, isolated: true, parentOrigin: preview.parentOrigin, session: preview.sid }),
           'utf8'
         )
         out['content-length'] = String(body.length)
@@ -1075,23 +1154,25 @@ function proxyUpgrade(req, socket, head) {
 /** A dedicated loopback origin preserves app paths and separates app DOM and
  * storage from Harness. Nothing outside loopback may be used as an upstream.
  * Servers are keyed by session + app and disposed with the plugin. */
-async function createPreview(target, sid, parentOrigin, page) {
+async function createPreview(target, sid, parentOrigin, fileRoot, touch) {
   const hostname = new URL(parentOrigin).hostname === 'localhost' ? '127.0.0.1' : 'localhost'
-  // `page` is the canonical address of a static target: a file URL has no
-  // upstream route for a proxied path to map back onto.
-  const preview = { target: new URL(target.origin), sid, parentOrigin, page: page || null }
+  // A directory can contain several pages; derive each document's identity
+  // from its own path instead of caching the first file opened in this session.
+  const preview = { target: new URL(target.origin), sid, parentOrigin, fileRoot }
   const originOfPreview = () => `http://${hostname}:${server.address().port}`
   const server = http.createServer((req, res) => {
     // Only the preview's own hostname is served, so a DNS-rebinding page cannot
     // reach the app through this origin.
     if (req.headers.host !== `${hostname}:${server.address().port}`) { res.writeHead(403); res.end(); return }
     if (!allowedPreviewRequest(req, parentOrigin, originOfPreview())) { res.writeHead(403); res.end(); return }
+    touch()
     proxyHttp(req, res, preview)
   })
   const sockets = new Set()
   server.on('connection', (socket) => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)) })
   server.on('upgrade', (req, socket, head) => {
     if (req.headers.origin !== originOfPreview()) { socket.destroy(); return }
+    touch()
     const path = req.url
     req.url = WS_RELAY_PATH + '?to=' + encodeTarget(target.origin) + '&path=' + encodeURIComponent(path)
     proxyUpgrade(req, socket, head)

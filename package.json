@@ -34,8 +34,10 @@
     "check": "node scripts/check.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:app": "node examples/demo-app/server.mjs --port 5180",
-    "test": "node tests/distribution.mjs && node tests/reliability.mjs",
+    "test": "node tests/distribution.mjs && node tests/preview.mjs && node tests/reliability.mjs",
     "test:distribution": "node tests/distribution.mjs",
+    "test:preview": "node tests/preview.mjs",
+    "test:harness": "node tests/harness.mjs",
     "test:reliability": "node tests/reliability.mjs"
   },
   "devDependencies": {
