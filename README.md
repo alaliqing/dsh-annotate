@@ -23,6 +23,69 @@ whole review to your conversation as structured text.
 ⌘/Ctrl ⇧ B → choose a local app → Mark → click → comment → send
 ```
 
+## Quick start
+
+### Ask your coding agent
+
+Copy this into an agent with access to the machine running Harness:
+
+```text
+Install dsh-annotate for my local DeepSeek Harness web profile.
+1. Check Node.js 20+, pnpm, and the dsh CLI used to launch the web client. Run `dsh plugin --profile web add dsh-annotate`. If the web client uses `npx @deepseek-ai/dsh`, use that in place of `dsh` for these commands.
+2. The package currently needs manual activation. Preserve the existing `$DSH_HOME/profiles/web/cordis.patch.yml` (default `~/.dsh/profiles/web/cordis.patch.yml`). Add a top-level `- insert:` entry containing `- name: dsh-annotate` only if absent.
+3. Run `dsh --profile web --dump-config` and confirm that dsh-annotate appears. Report the install and configuration results.
+4. Do not stop the Harness session you are using. Tell me to restart the web profile and refresh the browser, then open Annotate with ⌘/Ctrl⇧B or the conversation-header button.
+```
+
+### Install manually
+
+You need Node.js 20+, the `dsh` CLI, and pnpm on `PATH`. Chromium is the
+browser validated by the full test suite. If you launch Harness with
+`npx @deepseek-ai/dsh web`, replace `dsh` in the commands below with
+`npx @deepseek-ai/dsh`.
+
+```sh
+dsh plugin --profile web add dsh-annotate
+```
+
+The current package installs as a dependency; it does not enable itself as a
+Harness bundle. Open `$DSH_HOME/profiles/web/cordis.patch.yml` (normally
+`~/.dsh/profiles/web/cordis.patch.yml`) and add this entry without replacing
+existing entries or adding it twice:
+
+```yaml
+- insert:
+    - name: dsh-annotate
+```
+
+Check the effective configuration:
+
+```sh
+dsh --profile web --dump-config
+```
+
+Confirm that the output includes `dsh-annotate`. Restart the web profile and
+refresh the browser, then open a conversation and click **Annotate** in its
+header or press `⌘/Ctrl⇧B`. If you are installing from a Harness conversation,
+finish the configuration before restarting that session.
+
+### Use an unreleased checkout
+
+To run an unreleased checkout instead of the npm package, link it into the
+profile:
+
+```sh
+git clone https://github.com/alaliqing/dsh-annotate.git
+cd "${DSH_HOME:-$HOME/.dsh}/profiles/web"
+npx --yes pnpm@10 add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
+```
+
+Then follow the same activation and verification steps above. A packed
+unreleased checkout passed a native check with Harness CLI `0.1.5-rc.2`, web app
+and session controller `0.1.5-rc.3`; that check did not install npm `0.1.1`.
+See the [compatibility record](docs/compatibility.md) for the environment and
+validation limits.
+
 ## What it gives you
 
 - **Zero-config discovery** of running loopback development servers, including
@@ -43,42 +106,6 @@ whole review to your conversation as structured text.
 No screenshot is captured and no app style is changed. By default, the plugin
 only discovers servers you already run; process control requires an explicitly
 configured command.
-
-## Install
-
-Hand this line to your coding agent, or run it yourself:
-
-```text
-Install dsh-annotate: dsh plugin --profile web add dsh-annotate, then add it to the profile's cordis.patch.yml and restart dsh web.
-```
-
-Requirements: a restartable DeepSeek Harness web client, Node.js 20+, pnpm on
-`PATH` (used by `dsh plugin`), and Chromium (the validated browser).
-
-Verified with Harness CLI `0.1.5-rc.2`, web app and session controller
-`0.1.5-rc.3`. See [compatibility and native acceptance checks](docs/compatibility.md)
-for the exact environment and validation limits.
-
-```sh
-dsh plugin --profile web add dsh-annotate
-```
-
-Add the plugin to the profile's `cordis.patch.yml`:
-
-```yaml
-- insert:
-    - name: dsh-annotate
-```
-
-Restart `dsh web`.
-
-To run an unreleased checkout instead, link it into the profile:
-
-```sh
-git clone https://github.com/alaliqing/dsh-annotate.git
-cd ~/.dsh/profiles/web
-npx --yes pnpm@10 add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
-```
 
 ## Use
 

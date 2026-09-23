@@ -22,6 +22,64 @@
 ⌘/Ctrl ⇧ B → 选择本地应用 → 标记 → 点选 → 写批注 → 发送
 ```
 
+## 快速开始
+
+### 交给编程助手
+
+把下面这段话交给能访问 Harness 所在电脑的编程助手：
+
+```text
+请为本机 DeepSeek Harness 的 web profile 安装 dsh-annotate。
+1. 确认 Node.js 20+、pnpm 和当前网页端使用的 dsh CLI 可用，然后运行 `dsh plugin --profile web add dsh-annotate`。如果网页端通过 `npx @deepseek-ai/dsh` 启动，下文命令也用它代替 `dsh`。
+2. 当前包还需要手动启用。保留 `$DSH_HOME/profiles/web/cordis.patch.yml`（默认 `~/.dsh/profiles/web/cordis.patch.yml`）里的已有内容。只在没有 dsh-annotate 时增加一个顶层 `- insert:` 项，子项为 `- name: dsh-annotate`。
+3. 运行 `dsh --profile web --dump-config`，确认结果中出现 dsh-annotate，并报告安装和配置检查结果。
+4. 不要直接结束正在使用的 Harness 会话。告诉我重启 web profile、刷新浏览器后，可以通过 ⌘/Ctrl⇧B 或对话顶部的「标注」按钮打开面板。
+```
+
+### 手动安装
+
+需要 Node.js 20+、`dsh` CLI，以及 `PATH` 中可用的 pnpm。Chromium 是已通过
+完整测试的浏览器。如果你通过 `npx @deepseek-ai/dsh web` 启动 Harness，
+把下文命令中的 `dsh` 换成 `npx @deepseek-ai/dsh`。
+
+```sh
+dsh plugin --profile web add dsh-annotate
+```
+
+当前包会作为依赖安装，不会自动作为 Harness bundle 启用。打开
+`$DSH_HOME/profiles/web/cordis.patch.yml`（通常是
+`~/.dsh/profiles/web/cordis.patch.yml`），保留现有配置，增加以下条目；
+如果已经存在，就不要重复添加：
+
+```yaml
+- insert:
+    - name: dsh-annotate
+```
+
+检查实际生效的配置：
+
+```sh
+dsh --profile web --dump-config
+```
+
+确认输出中出现 `dsh-annotate`，然后重启 web profile、刷新浏览器。
+打开一个对话，点击顶部的**标注**按钮，或按 `⌘/Ctrl⇧B`。
+如果正在 Harness 对话中安装，请先完成配置，再重启该会话。
+
+### 使用尚未发布的检出
+
+如果要使用尚未发布的检出，而不是 npm 包，把它链接进 profile：
+
+```sh
+git clone https://github.com/alaliqing/dsh-annotate.git
+cd "${DSH_HOME:-$HOME/.dsh}/profiles/web"
+npx --yes pnpm@10 add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
+```
+
+然后按上面的方式启用并检查配置。已用未发布检出的打包产物，在 Harness CLI
+`0.1.5-rc.2`、网页端和会话控制器 `0.1.5-rc.3` 上完成真实接入验证；这次验证
+没有安装 npm `0.1.1`。环境和验证边界见[兼容性记录](docs/compatibility.md)。
+
 ## 核心能力
 
 - **零配置发现**正在运行的本地开发服务器，同时支持 IPv4 和 IPv6，并优先列出属于当前
@@ -37,41 +95,6 @@
 
 插件不会截图，也不会修改应用样式。默认只发现你已经运行的服务器；只有显式配置了
 启动命令，才会启用进程控制。
-
-## 安装
-
-把这行交给你的编程助手，或者自己执行：
-
-```text
-安装 dsh-annotate：dsh plugin --profile web add dsh-annotate，然后写入该 profile 的 cordis.patch.yml 并重启 dsh web。
-```
-
-需要可重启的 DeepSeek Harness 网页客户端、Node.js 20+、`PATH` 中可用的 pnpm
-（供 `dsh plugin` 使用），以及 Chromium（目前完成完整验证的浏览器）。
-
-已验证 Harness CLI `0.1.5-rc.2`，网页端与会话控制器 `0.1.5-rc.3`。
-具体环境及验证边界见[兼容性与真实 Harness 验收](docs/compatibility.md)。
-
-```sh
-dsh plugin --profile web add dsh-annotate
-```
-
-在该 profile 的 `cordis.patch.yml` 中启用插件：
-
-```yaml
-- insert:
-    - name: dsh-annotate
-```
-
-重启 `dsh web`。
-
-如果要跟踪尚未发布的检出，把包链接进 profile：
-
-```sh
-git clone https://github.com/alaliqing/dsh-annotate.git
-cd ~/.dsh/profiles/web
-npx --yes pnpm@10 add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
-```
 
 ## 使用
 
