@@ -14,11 +14,19 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const cli = process.env.DSH_CLI || 'dsh'
 const version = execFileSync(cli, ['--version'], { encoding: 'utf8' }).trim()
 const cliPath = isAbsolute(cli) ? cli : execFileSync(process.platform === 'win32' ? 'where' : 'which', [cli], { encoding: 'utf8' }).trim().split('\n')[0]
+const desktopWrapper = (await readFile(cliPath, 'utf8').catch(() => '')).includes('app.asar/dsh')
 const cliRequire = createRequire(realpathSync(cliPath))
 const runtimeVersions = {}
 for (const name of ['dsh-web-app', 'dsh-api-session-controller']) {
-  const manifest = JSON.parse(await readFile(cliRequire.resolve(`@deepseek-ai/${name}/package.json`), 'utf8'))
-  runtimeVersions[name] = manifest.version
+  try {
+    const manifest = JSON.parse(await readFile(cliRequire.resolve(`@deepseek-ai/${name}/package.json`), 'utf8'))
+    runtimeVersions[name] = manifest.version
+  } catch (error) {
+    // The macOS desktop CLI is a shell wrapper for packages inside app.asar;
+    // ordinary Node resolution cannot inspect those bundled manifests.
+    if (!desktopWrapper || error.code !== 'MODULE_NOT_FOUND') throw error
+    runtimeVersions[name] = 'bundled (not separately resolved)'
+  }
 }
 const temporary = await mkdtemp(join(tmpdir(), 'anno-harness-'))
 const workspace = join(temporary, 'workspace')
@@ -35,7 +43,20 @@ const model = http.createServer(async (req, res) => {
   if (JSON.stringify(body.messages || []).includes(comment)) annotationReceived()
   const base = { id: 'local-acceptance', created: 1, model: body.model || 'deepseek-flash' }
   const usage = { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
-  if (body.stream) {
+  if (req.url?.endsWith('/messages')) {
+    // DSH 0.2 uses DeepSeek Messages SSE; earlier releases used Chat Completions.
+    const events = [
+      { type: 'message_start', message: { id: base.id, type: 'message', role: 'assistant', model: base.model, content: [], stop_reason: null, usage: { input_tokens: 1, output_tokens: 0 } } },
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: responseText } },
+      { type: 'content_block_stop', index: 0 },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } },
+      { type: 'message_stop' },
+    ]
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    for (const event of events) res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+    res.end()
+  } else if (body.stream) {
     res.writeHead(200, { 'content-type': 'text/event-stream' })
     for (const delta of [{ role: 'assistant', content: '' }, { content: responseText }]) {
       res.write('data: ' + JSON.stringify({ ...base, object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: null }] }) + '\n\n')
@@ -52,12 +73,17 @@ const env = {
 }
 let harness, browser, page
 let logs = ''
+const browserErrors = []
 try {
   await mkdir(workspace)
   await writeFile(join(workspace, 'index.html'), '<!doctype html><html><head><title>Annotation acceptance</title></head><body><button id="save" style="margin:40px;padding:16px">Save changes</button></body></html>')
   const [pack] = JSON.parse(execFileSync('npm', ['pack', '--workspace', 'packages/dsh-annotate', '--pack-destination', temporary, '--cache', join(temporary, 'npm-cache'), '--json'], { cwd: repo, encoding: 'utf8' }))
   execFileSync(cli, ['plugin', '--profile', 'web', 'add', join(temporary, pack.filename)], { cwd: workspace, env, stdio: 'pipe' })
-  console.log('PASS real Harness installs the packed plugin into a clean profile')
+  const installedProfile = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles', 'web', 'package.json'), 'utf8'))
+  assert(installedProfile.dsh?.profile?.bundles?.includes('dsh-annotate'), 'plugin add did not register the package as a bundle')
+  const composed = execFileSync(cli, ['--profile', 'web', '--dump-config'], { cwd: workspace, env, encoding: 'utf8' })
+  assert.equal((composed.match(/^\s*- id: dsh-annotate\s*$/gm) || []).length, 1, 'bundle did not compose exactly one annotation row')
+  console.log('PASS real Harness installs and selects the packed bundle in a clean profile')
   await new Promise((resolve, reject) => { model.once('error', reject); model.listen(0, '127.0.0.1', resolve) })
   // Use official browser directory picking in automation, so no native OS
   // chooser appears. Only the model endpoint is simulated; Harness is real.
@@ -72,7 +98,6 @@ try {
 - insert:
     - name: '@deepseek-ai/dsh-host-directory-picker-browse'
     - name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'
-    - name: dsh-annotate
 `)
   harness = spawn(cli, ['web', '--host', '127.0.0.1', '--port', '0', '--no-open'], { cwd: workspace, env, stdio: ['ignore', 'pipe', 'pipe'] })
   const url = await new Promise((resolve, reject) => {
@@ -90,18 +115,31 @@ try {
   const { chromium } = await loadPlaywright()
   browser = await chromium.launch({ channel: 'chromium' })
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, locale: 'en-US' })
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') browserErrors.push(`${message.type()}: ${message.text()}`)
+  })
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`))
   page.setDefaultTimeout(15_000)
   await page.goto(url)
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
-  await page.getByRole('button', { name: 'Choose workspace', exact: true }).click()
+  const chooseWorkspace = page.getByRole('button', { name: 'Choose workspace', exact: true })
+  await chooseWorkspace.click()
   // These controls belong to the real Harness directory browser.
-  await page.getByRole('dialog').waitFor()
-  await page.getByRole('dialog').getByRole('button', { name: 'Edit path', exact: true }).click()
-  const pathInput = page.getByRole('dialog').getByRole('textbox')
+  const dialog = page.getByRole('dialog')
+  if (!await dialog.isVisible()) {
+    const addWorkspace = page.getByText(/Add workspace/)
+    // DSH 0.2 opens a workspace menu first; the new-session transition may
+    // replace that menu once before its contents become stable.
+    if (!await addWorkspace.waitFor({ timeout: 2000 }).then(() => true, () => false)) await chooseWorkspace.click()
+    await addWorkspace.click()
+  }
+  await dialog.waitFor()
+  await dialog.getByRole('button', { name: 'Edit path', exact: true }).click()
+  const pathInput = dialog.getByRole('textbox')
   await pathInput.fill(workspace)
   await pathInput.press('Enter')
-  await page.getByRole('dialog').getByRole('button', { name: 'Open', exact: true }).click()
-  await page.getByRole('dialog').waitFor({ state: 'hidden' })
+  await dialog.getByRole('button', { name: 'Open', exact: true }).click()
+  await dialog.waitFor({ state: 'hidden' })
   const composer = page.locator('[data-composer-input][contenteditable="true"]')
   await composer.fill('Start the annotation acceptance check.')
   await page.getByRole('button', { name: 'Send message', exact: true }).click()
@@ -135,6 +173,7 @@ try {
   console.log('PASS real Harness accepts the annotation, delivers its context to the local model, and preserves the unrelated draft')
   console.log('VERSIONS', JSON.stringify({ cli: version, ...runtimeVersions, node: process.version, chromium: browser.version(), platform: process.platform, arch: process.arch }))
 } catch (error) {
+  if (browserErrors.length) console.error(browserErrors.join('\n').replace(/token=[\w-]+/g, 'token=[redacted]').slice(-4000))
   if (page) {
     console.error((await page.locator('body').innerText().catch(() => '')).slice(-6000))
     await mkdir(join(repo, 'tests', 'shots'), { recursive: true })

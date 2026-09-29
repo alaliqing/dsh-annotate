@@ -1,6 +1,29 @@
 # Harness compatibility
 
-The native acceptance check on 2026-09-22 passed with this resolved combination:
+## Native acceptance: 2026-09-29
+
+| Component | Tested version or environment |
+| --- | --- |
+| DeepSeek Harness Desktop and its CLI | `0.2.0-rc.2` |
+| Bundled `@deepseek-ai/dsh-web-app` | `0.2.0-rc.2` |
+| Bundled `@deepseek-ai/dsh-api-session-controller` | `0.2.0-rc.2` |
+| Plugin | `0.1.3` checkout, installed from `npm pack` |
+| Node.js | `25.5.0` test runner; `24.18.1` bundled desktop runtime |
+| Chromium | `153.0.8010.12` |
+| Host | macOS, Apple Silicon |
+
+The Desktop app's packaged manifests identify the bundled web app and session
+controller versions. Its CLI is a shell wrapper around `app.asar`, so the test
+runner cannot resolve those manifests with ordinary Node module resolution.
+
+In an isolated profile, `dsh plugin add` selected the package's declared bundle
+without a manual plugin insertion. Chromium then opened Annotate, previewed a
+workspace page, submitted an annotation to the real session controller, and
+confirmed that the local model fixture received its context while an unrelated
+composer draft remained unsent. This check used a packed checkout, not the
+published npm package or a real model provider.
+
+## Earlier native acceptance: 2026-09-22
 
 | Component | Verified version |
 | --- | --- |
@@ -10,14 +33,14 @@ The native acceptance check on 2026-09-22 passed with this resolved combination:
 | Node.js | `25.5.0` |
 | Chromium | `153.0.8010.12` |
 | Host | macOS, Apple Silicon |
-| Plugin | Current unreleased checkout, installed from `npm pack` |
+| Plugin | Earlier unreleased checkout, installed from `npm pack` |
 
-The CLI depends on version ranges, so installing the same CLI version can resolve
-different runtime packages later. The acceptance script prints the resolved web
-app and session-controller versions. This table records one tested combination,
-not a promise that every earlier or later Harness build is compatible. Node
-20/22/24 build checks and the ordinary Chromium suite exercise the plugin with
-the repository fixture; they are separate from this native Harness check.
+The earlier check predates the `0.1.3` bundle and peer declarations. The CLI
+can resolve runtime package versions through ranges, so its version alone does
+not identify every package it loads. These tables record specific tested
+combinations, not a promise of support for every earlier or later Harness build.
+Node 20/22/24 build checks and the ordinary Chromium suite use the repository
+fixture; they are separate from native Harness acceptance.
 
 ## Reproduce the native check
 
@@ -34,15 +57,24 @@ For a separate CLI installation:
 DSH_CLI=/absolute/path/to/node_modules/.bin/dsh npm run test:harness
 ```
 
+For the macOS Desktop CLI:
+
+```sh
+DSH_CLI="/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" npm run test:harness
+```
+
 The script creates its own temporary `DSH_HOME` and workspace, packs this checkout,
-installs that tarball using `dsh plugin`, enables the plugin in the new profile,
-and starts the real web app on an available loopback port. It drives Chromium
+installs that tarball using `dsh plugin`, and asserts that the package's bundle
+is selected in the new profile without a manual insertion. It then configures
+the local model fixture and browser directory picker, and starts the real web
+app on an available loopback port. It drives Chromium
 through workspace selection, a conversation, element selection and annotation
 submission. It asserts that the real session controller accepts the annotation,
 the structured context reaches the model endpoint, and an unrelated composer
 draft remains unsent.
 
-The model endpoint is a local protocol fixture. No paid model, user credentials,
+The model endpoint is a local Chat Completions or DeepSeek Messages protocol
+fixture, chosen from the actual request. No paid model, user credentials,
 or existing profile is used. Official browser-based directory picking replaces
 the native OS chooser for automation. This verifies the Harness integration and
 message delivery, not real-provider authentication or model response quality.

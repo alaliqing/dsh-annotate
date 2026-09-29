@@ -36,15 +36,17 @@
 dsh plugin --profile web add dsh-annotate
 ```
 
-当前版本还需要在 `$DSH_HOME/profiles/web/cordis.patch.yml`（默认
-`~/.dsh/profiles/web/cordis.patch.yml`）中启用。保留现有配置，只添加一次：
+`0.1.3` 及后续版本自带 bundle 补丁，`dsh plugin add` 会自动启用。如果安装的是
+`0.1.2` 或更早版本，还需在 `$DSH_HOME/profiles/web/cordis.patch.yml`（默认
+`~/.dsh/profiles/web/cordis.patch.yml`）中添加一次：
 
 ```yaml
 - insert:
     - name: dsh-annotate
 ```
 
-用 `dsh --profile web --dump-config` 确认输出中出现 `dsh-annotate`。
+从 `0.1.2` 或更早版本升级后，请移除旧的手动插入行，保留其他 profile 配置。
+用 `dsh --profile web --dump-config` 确认只有一个 `dsh-annotate` 条目。
 重启 web profile、刷新浏览器后，点击**标注**或按 `⌘/Ctrl⇧B`。
 如果使用 `npx @deepseek-ai/dsh web`，把上述命令中的 `dsh` 换成
 `npx @deepseek-ai/dsh`。已测试版本和限制见[兼容性记录](docs/compatibility.md)。
@@ -125,17 +127,18 @@ Shadow DOM 内部、跨源子 frame 和 Canvas 内部对象，可能需要正常
 ## 可选配置
 
 ```yaml
-- insert:
-    - name: dsh-annotate
-      config:
-        detect:
-          extraPorts: [4321]
-          probeTimeoutMs: 900
-          cacheMs: 2000
-          staticPorts: false
-          staticFiles: false
+- id: dsh-annotate
+  config:
+    detect:
+      extraPorts: [4321]
+      probeTimeoutMs: 900
+      cacheMs: 2000
+      staticPorts: false
+      staticFiles: false
 ```
 
+`0.1.3` 及后续版本可将此覆盖配置写入 web profile 的 `cordis.patch.yml`；
+插件条目由 bundle 自己提供。
 `detect.staticPorts: false` 会停止盲扫常见端口，只保留真实监听；`detect.staticFiles:
 false` 不再列出工作区里的静态页面；`detect.extraPorts` 用于补充习惯使用的端口。
 
@@ -151,12 +154,12 @@ npm run check
 npm test
 ```
 
-要使用尚未发布的检出，可链接进 web profile，然后按上面的说明启用：
+要使用尚未发布的检出，请通过 `dsh plugin` 安装，让它自动加入 web profile
+的 bundle 列表：
 
 ```sh
 git clone https://github.com/alaliqing/dsh-annotate.git
-cd "${DSH_HOME:-$HOME/.dsh}/profiles/web"
-npx --yes pnpm@10 add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
+dsh plugin --profile web add "link:/绝对路径/dsh-annotate/packages/dsh-annotate"
 ```
 
 默认测试会在 Chromium 中驱动真实的 client、shim 和 overlay 构建产物，使用 Harness
