@@ -37,20 +37,30 @@ Or install manually with Node.js 20+, the `dsh` CLI, and pnpm on `PATH`:
 dsh plugin --profile web add dsh-annotate
 ```
 
-Version `0.1.3` and later declares its own bundle patch, so `dsh plugin add`
-enables it automatically. If the installed version is `0.1.2` or earlier, add
-this entry once to `$DSH_HOME/profiles/web/cordis.patch.yml` (default
-`~/.dsh/profiles/web/cordis.patch.yml`):
+For a new install, version `0.1.3` and later declares its own bundle patch, so
+`dsh plugin add` registers and enables it automatically. Version `0.1.2` and
+earlier used this manual entry in `$DSH_HOME/profiles/web/cordis.patch.yml`
+(default `~/.dsh/profiles/web/cordis.patch.yml`):
 
 ```yaml
 - insert:
     - name: dsh-annotate
 ```
 
-When upgrading from `0.1.2` or earlier, remove that old manual insertion after
-installing `0.1.3` or later; keep all other profile entries. Check for one
-`dsh-annotate` row with `dsh --profile web --dump-config`. Restart the web
-profile and refresh the browser, then click **Annotate** or press `⌘/Ctrl⇧B`.
+When upgrading an existing `0.1.2` or earlier installation, remove and add the
+package so DSH registers its new bundle; updating the existing dependency alone
+may leave it out of the profile's bundle list:
+
+```sh
+dsh plugin --profile web remove dsh-annotate
+dsh plugin --profile web add dsh-annotate
+```
+
+Remove only the old manual insertion from `cordis.patch.yml`; keep all other
+profile entries. If no patch entries remain, use `[]` rather than a comments-only
+file. Check that `dsh --profile web --dump-config` has exactly one
+`- id: dsh-annotate` row. Restart the web profile and refresh the browser, then
+click **Annotate** or press `⌘/Ctrl⇧B`.
 If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
 `npx @deepseek-ai/dsh`. See [compatibility](docs/compatibility.md) for tested
 versions and limits.

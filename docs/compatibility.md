@@ -23,6 +23,19 @@ confirmed that the local model fixture received its context while an unrelated
 composer draft remained unsent. This check used a packed checkout, not the
 published npm package or a real model provider.
 
+## Published-package upgrade acceptance: 2026-09-30
+
+On the same Desktop `0.2.0-rc.2` installation, an existing web profile with a
+source-link dependency and manual `cordis.patch.yml` insertion was upgraded to
+the published `dsh-annotate@0.1.3` tarball. Updating the existing dependency
+alone did not add it to `dsh.profile.bundles`; removing and adding the package
+through `dsh plugin` did. With the old insertion removed, `--dump-config`
+contained exactly one `- id: dsh-annotate` row. A separately started web profile
+then displayed **UI annotations** and opened a running local service in its
+preview. This published-package check covered installation, composition, and
+the panel and preview UI; the send-to-session check above used the packed
+checkout and a local model fixture.
+
 ## Earlier native acceptance: 2026-09-22
 
 | Component | Verified version |
