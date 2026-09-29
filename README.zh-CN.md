@@ -36,17 +36,26 @@
 dsh plugin --profile web add dsh-annotate
 ```
 
-`0.1.3` 及后续版本自带 bundle 补丁，`dsh plugin add` 会自动启用。如果安装的是
-`0.1.2` 或更早版本，还需在 `$DSH_HOME/profiles/web/cordis.patch.yml`（默认
-`~/.dsh/profiles/web/cordis.patch.yml`）中添加一次：
+全新安装时，`0.1.3` 及后续版本自带 bundle 补丁，`dsh plugin add` 会自动登记
+并启用插件。`0.1.2` 及更早版本曾在 `$DSH_HOME/profiles/web/cordis.patch.yml`
+（默认 `~/.dsh/profiles/web/cordis.patch.yml`）中手动添加：
 
 ```yaml
 - insert:
     - name: dsh-annotate
 ```
 
-从 `0.1.2` 或更早版本升级后，请移除旧的手动插入行，保留其他 profile 配置。
-用 `dsh --profile web --dump-config` 确认只有一个 `dsh-annotate` 条目。
+升级已有的 `0.1.2` 或更早版本时，先移除再添加包，让 DSH 登记新的 bundle；
+只更新原有依赖可能不会将它加入 profile 的 bundle 列表：
+
+```sh
+dsh plugin --profile web remove dsh-annotate
+dsh plugin --profile web add dsh-annotate
+```
+
+只从 `cordis.patch.yml` 移除旧的手动插入行，保留其他 profile 配置。如果没有
+其他补丁条目，文件内容应为 `[]`，不能只留注释。用
+`dsh --profile web --dump-config` 确认恰好有一个 `- id: dsh-annotate` 条目。
 重启 web profile、刷新浏览器后，点击**标注**或按 `⌘/Ctrl⇧B`。
 如果使用 `npx @deepseek-ai/dsh web`，把上述命令中的 `dsh` 换成
 `npx @deepseek-ai/dsh`。已测试版本和限制见[兼容性记录](docs/compatibility.md)。
