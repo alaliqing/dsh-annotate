@@ -386,7 +386,7 @@ function dsaI18n(preferred) {
  * Bundled by build.mjs into the ModuleLoader format. The overlay is a separate
  * script the host half injects into the previewed document.
  */
-const inject = ['timer', 'sessions']
+const inject = ['timer', 'sessions', 'slots', 'sidebarRight', 'sidebarRightTabs']
 
 const CHANNEL_IN = 'dsh-annotate-overlay'
 const CHANNEL_OUT = 'dsh-annotate-panel'

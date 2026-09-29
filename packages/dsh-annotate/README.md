@@ -24,18 +24,20 @@ Or install manually with Node.js 20+, the `dsh` CLI, and pnpm on `PATH`:
 dsh plugin --profile web add dsh-annotate
 ```
 
-The current package needs a profile entry in
+Version `0.1.3` and later enables itself as a bundle when installed this way.
+For version `0.1.2` or earlier, add this entry once to
 `$DSH_HOME/profiles/web/cordis.patch.yml` (default
-`~/.dsh/profiles/web/cordis.patch.yml`). Keep existing entries and add this only
-once:
+`~/.dsh/profiles/web/cordis.patch.yml`):
 
 ```yaml
 - insert:
     - name: dsh-annotate
 ```
 
-Check for `dsh-annotate` with `dsh --profile web --dump-config`. Restart the web
-profile and refresh the browser, then click **Annotate** or press `⌘/Ctrl⇧B`.
+When upgrading, remove the old manual insertion and keep all unrelated profile
+entries. Check for one `dsh-annotate` row with `dsh --profile web --dump-config`.
+Restart the web profile and refresh the browser, then click **Annotate** or press
+`⌘/Ctrl⇧B`.
 If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
 `npx @deepseek-ai/dsh`. The package ships built files; no build step is needed.
 
@@ -63,16 +65,16 @@ If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
 | `lib/client.js` | Client half: the sidebar tab |
 | `lib/shim.js` | Injected into previewed documents: URL and socket mapping, navigation reports |
 | `lib/overlay.js` | Injected into previewed documents: picking, markers, comment cards |
-| `cordis.patch.yml` | Activation example to add to the web profile manually |
+| `cordis.patch.yml` | Bundle layer that activates the plugin automatically |
 
 ## Compatibility
 
 Chromium is the validated browser. A restartable, local DeepSeek Harness web
 client is required.
 
-A packed unreleased checkout passed a native check with Harness CLI
-`0.1.5-rc.2`, web app and session controller `0.1.5-rc.3`; that check did not
-install npm `0.1.1`. See the [compatibility record](https://github.com/alaliqing/dsh-annotate/blob/main/docs/compatibility.md)
+A packed `0.1.3` checkout passed a native check with Harness Desktop
+`0.2.0-rc.2`; this does not verify an npm-published `0.1.3` package. See the
+[compatibility record](https://github.com/alaliqing/dsh-annotate/blob/main/docs/compatibility.md)
 for the environment and validation limits.
 
 Local development only: proxy targets are restricted to loopback, so a remote

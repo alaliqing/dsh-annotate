@@ -1,3 +1,4 @@
-# dsh-annotate 安装清单：dsh plugin add 时把插件行插入 profile 配置
+# Applied as the package's dsh.bundle.patch layer when installed into a profile.
 - insert:
-    - name: dsh-annotate
+    - id: dsh-annotate
+      name: dsh-annotate

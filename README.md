@@ -37,17 +37,19 @@ Or install manually with Node.js 20+, the `dsh` CLI, and pnpm on `PATH`:
 dsh plugin --profile web add dsh-annotate
 ```
 
-The current package needs a profile entry in
-`$DSH_HOME/profiles/web/cordis.patch.yml` (default
-`~/.dsh/profiles/web/cordis.patch.yml`). Keep existing entries and add this only
-once:
+Version `0.1.3` and later declares its own bundle patch, so `dsh plugin add`
+enables it automatically. If the installed version is `0.1.2` or earlier, add
+this entry once to `$DSH_HOME/profiles/web/cordis.patch.yml` (default
+`~/.dsh/profiles/web/cordis.patch.yml`):
 
 ```yaml
 - insert:
     - name: dsh-annotate
 ```
 
-Check for `dsh-annotate` with `dsh --profile web --dump-config`. Restart the web
+When upgrading from `0.1.2` or earlier, remove that old manual insertion after
+installing `0.1.3` or later; keep all other profile entries. Check for one
+`dsh-annotate` row with `dsh --profile web --dump-config`. Restart the web
 profile and refresh the browser, then click **Annotate** or press `⌘/Ctrl⇧B`.
 If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
 `npx @deepseek-ai/dsh`. See [compatibility](docs/compatibility.md) for tested
@@ -144,17 +146,18 @@ Chromium.
 ## Optional configuration
 
 ```yaml
-- insert:
-    - name: dsh-annotate
-      config:
-        detect:
-          extraPorts: [4321]
-          probeTimeoutMs: 900
-          cacheMs: 2000
-          staticPorts: false
-          staticFiles: false
+- id: dsh-annotate
+  config:
+    detect:
+      extraPorts: [4321]
+      probeTimeoutMs: 900
+      cacheMs: 2000
+      staticPorts: false
+      staticFiles: false
 ```
 
+For `0.1.3` and later, put this override in the web profile's
+`cordis.patch.yml`; the bundle supplies the plugin row.
 `detect.staticPorts: false` stops probing the common-port list and leaves only
 real listeners; `detect.staticFiles: false` stops offering the workspace's own
 HTML pages. `detect.extraPorts` adds ports people run on by habit.
@@ -172,13 +175,12 @@ npm run check
 npm test
 ```
 
-To use an unreleased checkout, link it into the web profile and then add the
-profile entry shown above:
+To use an unreleased checkout, install it through `dsh plugin` so the bundle is
+selected in the web profile:
 
 ```sh
 git clone https://github.com/alaliqing/dsh-annotate.git
-cd "${DSH_HOME:-$HOME/.dsh}/profiles/web"
-npx --yes pnpm@10 add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
+dsh plugin --profile web add "link:/absolute/path/to/dsh-annotate/packages/dsh-annotate"
 ```
 
 The default tests drive the real built client, shim, and overlay in Chromium
