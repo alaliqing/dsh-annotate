@@ -15,6 +15,10 @@ the capability, including encoded spaces and literal plus signs.
 `0.1.7` marks the externally installed Cordis peer as optional because Harness
 supplies the runtime and the plugin does not import that package.
 
+`0.1.8` keeps injected scripts ASCII so localized annotation controls work on
+pages without a charset declaration and pages with a legacy document encoding.
+Chromium regression checks cover both cases, including saved Chinese notes.
+
 The `0.1.6` packed checkout passed `npm test` and the isolated real-Harness
 web check below on macOS Apple Silicon with Desktop CLI `0.2.0-rc.2`, Node
 `25.5.0` and Chromium `153.0.8010.12`. The model fixture received the selector
@@ -25,7 +29,13 @@ changed CSS/JavaScript with immutable upstream cache headers.
 The actual Desktop window was also fully restarted with this checkout. Its
 `dsh-app://app` renderer opened the running type-design website and reloaded
 it successfully; the application and panel URLs contained no navigation key.
-This native UI check is separate from the automated web-profile acceptance.
+The published `0.1.7` package subsequently passed a full native restart,
+HTTP and workspace-file previews, annotation submission to the real DeepSeek
+provider, unrelated composer-draft preservation, exact encoded queries and
+hashes after redirects, and edited CSS/JavaScript after refresh despite immutable
+cache headers. That check also exposed the undeclared-charset issue fixed in
+`0.1.8`. These native checks are separate from automated web-profile acceptance.
+Windows and Linux native windows have not been exercised.
 
 ## Packed web-profile acceptance: 2026-09-29
 

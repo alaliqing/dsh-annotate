@@ -39,7 +39,7 @@ const app = http.createServer((req, res) => {
   }
   if (req.url === '/absolute-redirect') { res.writeHead(302, { location: `http://127.0.0.1:${app.address().port}/destination?from=redirect#ready` }); res.end(); return }
   if (req.url.startsWith('/echo')) { res.setHeader('content-type','application/json'); res.end(JSON.stringify({ cookie:req.headers.cookie || '', url:req.url })); return }
-  res.setHeader('content-type','text/html; charset=utf-8')
+  res.setHeader('content-type', req.url.startsWith('/undeclared-encoding') ? 'text/html' : req.url.startsWith('/legacy-encoding') ? 'text/html; charset=windows-1252' : 'text/html; charset=utf-8')
   res.end(`<!doctype html><html><head><title>Review test</title><link rel="stylesheet" href="/immutable.css"><script src="/immutable.js"></script><style>body{margin:0;font:14px system-ui;background:#f6f7f8;color:#202833}main{padding:28px}h1{font-size:25px}.scroller{height:240px;overflow:auto;border:1px solid #ccd3db;background:white;padding:20px}.spacer{height:75px}button{padding:12px 18px;background:#fff;border:1px solid #aab5c2;border-radius:8px}#after{height:1500px}</style></head><body><main><h1>Review workspace</h1><p>Real DOM, nested scrolling and route state</p><div class="scroller"><div class="spacer"></div><button class="hover:bg-blue-500 w-1/2" id="target:one">Review this element</button><div style="height:700px"></div></div><p><button id="route">Open second page</button></p><input id="draft" placeholder="Keep this form value"><div id="after"></div></main><script>document.querySelector('#route').onclick=()=>history.pushState({},'','/second?view=2#details')</script></body></html>`)
 })
 app.on('upgrade', (req, socket) => {
@@ -126,6 +126,22 @@ try {
     return page.frames().find(f=>f.url().startsWith('http://localhost:'))
   }
   let frame = await open(); assert(frame)
+  for (const route of ['undeclared-encoding', 'legacy-encoding']) {
+    await page.locator('.dsa-url').fill(upstream + '/' + route)
+    await page.locator('.dsa-url').press('Enter')
+    await frame.waitForFunction((path) => location.pathname === path && document.querySelector('.dsa-layer'), '/' + route)
+    assert.equal(await frame.evaluate(() => document.characterSet), 'windows-1252')
+    await page.locator('button[title^="标记模式"]').click()
+    await frame.locator('[id="target:one"]').click({force:true})
+    assert.equal(await frame.locator('.dsa-card textarea').getAttribute('placeholder'), '写一句要改什么…（Shift+Enter 换行）')
+    assert.equal(await frame.locator('.dsa-card [data-act="save"]').textContent(), '保存')
+    await frame.locator('.dsa-card textarea').fill('中文批注 ✓')
+    await frame.locator('.dsa-card textarea').press('Enter')
+    await frame.locator('.dsa-pin').click()
+    assert.equal(await frame.locator('.dsa-comment-text').textContent(), '中文批注 ✓')
+  }
+  frame = await open()
+  pass('Chinese annotation UI and notes survive undeclared and legacy document encodings')
   assert.equal(await frame.evaluate(()=>location.pathname),'/')
   assert.equal(await frame.evaluate(()=>{try{return !!parent.document.body}catch{return false}}),false);pass('preview preserves paths and cannot read Harness DOM')
   const network = await frame.evaluate(async (target) => {

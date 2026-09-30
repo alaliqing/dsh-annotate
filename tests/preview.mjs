@@ -96,6 +96,14 @@ try {
   await release(redirects, 'redirects', 'redirects')
   pass('same-upstream redirects retain the injected preview; external redirects stay explicit')
 
+  const unicodeSid = '中文验收 ✓ 🌟'
+  const encoding = await api('preview', { sid: unicodeSid, url: upstream, lease: 'encoding' })
+  const encodingHtml = await (await fetch(encoding.url)).text()
+  for (const [, source] of encodingHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)) assert(!/[^\x00-\x7f]/.test(source))
+  assert.equal(configOf(encodingHtml).session, unicodeSid)
+  await release(encoding, unicodeSid, 'encoding')
+  pass('injected scripts are encoding independent and retain Unicode configuration')
+
   const encodedQuery = '?q=a%20b&plus=%2B&view=2'
   const desktop = await api('preview', { sid: 'desktop', root: workspace, url: secondUrl + encodedQuery, lease: 'desktop', parentOrigin: 'dsh-app://app' })
   assert(new URL(desktop.url).search.startsWith(encodedQuery + '&__dsh_anno_key='))
