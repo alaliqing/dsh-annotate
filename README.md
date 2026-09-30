@@ -13,7 +13,7 @@
 
 </div>
 
-`dsh-annotate` adds a visual review panel to the DeepSeek Harness web client.
+`dsh-annotate` adds a visual review panel to DeepSeek Harness Desktop and its web client.
 Open a local app, click the elements you want changed, leave notes, and send the
 whole review to your conversation as structured text.
 
@@ -28,14 +28,22 @@ whole review to your conversation as structured text.
 Give a coding agent this prompt:
 
 ```text
-Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the local DeepSeek Harness web profile. Preserve existing configuration and do not stop the current Harness session. Verify the installation, then explain how to restart Harness and open Annotate.
+Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the active local DeepSeek Harness profile (desktop for the Desktop app, web for the browser). Preserve existing configuration and do not stop the current Harness session. Verify the installation, then explain how to restart Harness and open Annotate.
 ```
 
 Or install manually with Node.js 20+, the `dsh` CLI, and pnpm on `PATH`:
 
 ```sh
-dsh plugin --profile web add dsh-annotate
+# Desktop app
+dsh plugin --profile desktop add dsh-annotate@latest
+# Browser
+dsh plugin --profile web add dsh-annotate@latest
 ```
+
+For an existing `0.1.3` or newer install, run the same command to upgrade, then
+fully quit and reopen Desktop, or restart the web profile and refresh the browser.
+Desktop requires `0.1.5` or newer. Use the CLI bundled with your Desktop app if
+`dsh` is not on `PATH`.
 
 For a new install, version `0.1.3` and later declares its own bundle patch, so
 `dsh plugin add` registers and enables it automatically. Version `0.1.2` and
@@ -46,6 +54,9 @@ earlier used this manual entry in `$DSH_HOME/profiles/web/cordis.patch.yml`
 - insert:
     - name: dsh-annotate
 ```
+
+In the legacy upgrade commands below, replace `web` with `desktop` if that is
+the profile you use.
 
 When upgrading an existing `0.1.2` or earlier installation, remove and add the
 package so DSH registers its new bundle; updating the existing dependency alone

@@ -22,6 +22,7 @@
 
 import http from 'node:http'
 import https from 'node:https'
+import { randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { readFileSync, realpathSync, statSync } from 'node:fs'
 import { readFile, readdir, realpath, stat } from 'node:fs/promises'
@@ -169,7 +170,8 @@ function requestOrigin(req) {
 
 const originOf = (value) => {
   try {
-    return new URL(value).origin
+    const url = new URL(value)
+    return url.protocol === 'dsh-app:' && url.host === 'app' && !url.username && !url.password ? 'dsh-app://app' : url.origin
   } catch (error) {
     void error
     return null
@@ -845,7 +847,9 @@ export function apply(ctx, config = {}) {
           if (!target || !isLocalTarget(target) || Number(target.port) === hostPort(req.headers.host)) return send(res, 400, { ok: false, code: 'notLocalTarget', error: 'local development services only; Harness itself cannot be previewed' })
           suffix = target.pathname + target.search + target.hash
         }
-        const parentOrigin = requestOrigin(req)
+        // Desktop forwards API requests to its HTTP backend, while the actual
+        // frame parent remains the privileged dsh-app document.
+        const parentOrigin = args.parentOrigin === 'dsh-app://app' ? args.parentOrigin : requestOrigin(req)
         const key = String(sid) + ':' + parentOrigin + ':' + target.origin + ':' + (fileRoot || '')
         if (!previews.has(key)) {
           if (previews.size >= 24) {
@@ -863,7 +867,9 @@ export function apply(ctx, config = {}) {
         if (typeof args.lease === 'string' && args.lease) activity.leases.set(args.lease, Date.now() + PREVIEW_IDLE_MS)
         const entry = await previews.get(key)
         if (disposed) { entry.close(); return send(res, 503, { ok: false, error: 'plugin is shutting down' }) }
-        return send(res, 200, { ok: true, url: entry.origin + suffix, origin: entry.origin })
+        const frameUrl = new URL(entry.origin + suffix)
+        if (entry.frameKey) frameUrl.searchParams.set('__dsh_anno_key', entry.frameKey)
+        return send(res, 200, { ok: true, url: frameUrl.href, origin: entry.origin })
       }
       if (method === 'retainPreview' || method === 'releasePreview') {
         for (const [key, promise] of previews) {
@@ -987,6 +993,9 @@ function proxyHttp(req, res, preview) {
     const lower = key.toLowerCase()
     if (lower === 'host' || HOP_BY_HOP.has(lower)) continue
     if (lower === 'accept-encoding') continue // keep bodies readable for rewriting
+    // A development preview must show edits even when its server advertises
+    // immutable assets or answers a stale validator with 304.
+    if ((req.method === 'GET' || req.method === 'HEAD') && (lower === 'if-none-match' || lower === 'if-modified-since')) continue
     if (lower === 'cookie') {
       const forwarded = splitCookies(value, enc)
       if (forwarded) headers.cookie = forwarded
@@ -998,13 +1007,18 @@ function proxyHttp(req, res, preview) {
     }
     if (lower === 'referer') {
       // The preview keeps the app's own paths, so only the origin changes.
-      try { const ref = new URL(value); headers.referer = origin + ref.pathname + ref.search } catch (error) { void error }
+      try {
+        const ref = new URL(value)
+        if (preview.frameKey && ref.searchParams.has('__dsh_anno_key')) ref.searchParams.delete('__dsh_anno_key')
+        headers.referer = origin + ref.pathname + ref.search
+      } catch (error) { void error }
       continue
     }
     headers[key] = value
   }
   headers.host = target.host
   headers['accept-encoding'] = 'identity'
+  headers['cache-control'] = 'no-cache'
 
   const upstream = (target.protocol === 'https:' ? https : http).request(
     {
@@ -1032,14 +1046,19 @@ function proxyHttp(req, res, preview) {
           // the next document will lose the shim and annotation overlay.
           try {
             const destination = new URL(value, origin + tail + search)
-            out.location = destination.origin === origin
-              ? destination.pathname + destination.search + destination.hash
-              : value
+            if (destination.origin === origin) {
+              // The initial custom-scheme iframe has no Referer on a redirect
+              // either. Keep its capability on local redirects only.
+              if (preview.frameKey && req.headers['sec-fetch-dest'] === 'iframe') destination.searchParams.set('__dsh_anno_key', preview.frameKey)
+              out.location = destination.pathname + destination.search + destination.hash
+            } else out.location = value
           } catch { out.location = value }
           continue
         }
         out[key] = value
       }
+      out['cache-control'] = 'no-store'
+      delete out.expires
 
       if (!type.includes('text/html')) {
         res.writeHead(upstreamRes.statusCode ?? 502, out)
@@ -1158,13 +1177,21 @@ async function createPreview(target, sid, parentOrigin, fileRoot, touch) {
   const hostname = new URL(parentOrigin).hostname === 'localhost' ? '127.0.0.1' : 'localhost'
   // A directory can contain several pages; derive each document's identity
   // from its own path instead of caching the first file opened in this session.
-  const preview = { target: new URL(target.origin), sid, parentOrigin, fileRoot }
+  const frameKey = parentOrigin === 'dsh-app://app' ? randomUUID() : null
+  const preview = { target: new URL(target.origin), sid, parentOrigin, fileRoot, frameKey }
   const originOfPreview = () => `http://${hostname}:${server.address().port}`
   const server = http.createServer((req, res) => {
     // Only the preview's own hostname is served, so a DNS-rebinding page cannot
     // reach the app through this origin.
     if (req.headers.host !== `${hostname}:${server.address().port}`) { res.writeHead(403); res.end(); return }
-    if (!allowedPreviewRequest(req, parentOrigin, originOfPreview())) { res.writeHead(403); res.end(); return }
+    const frameUrl = new URL(req.url, originOfPreview())
+    // Chromium omits the custom-scheme Referer on a desktop iframe load.
+    // Authorize that initial navigation with an unguessable per-preview key,
+    // retaining provenance checks for unrelated pages and subresource fetches.
+    const keyedFrame = frameKey && req.headers['sec-fetch-dest'] === 'iframe' && frameUrl.searchParams.get('__dsh_anno_key') === frameKey
+    if (!keyedFrame && !allowedPreviewRequest(req, parentOrigin, originOfPreview())) { res.writeHead(403); res.end(); return }
+    if (frameKey && frameUrl.searchParams.has('__dsh_anno_key')) frameUrl.searchParams.delete('__dsh_anno_key')
+    req.url = frameUrl.pathname + frameUrl.search
     touch()
     proxyHttp(req, res, preview)
   })
@@ -1178,5 +1205,5 @@ async function createPreview(target, sid, parentOrigin, fileRoot, touch) {
     proxyUpgrade(req, socket, head)
   })
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, hostname, resolve) })
-  return { server, origin: `http://${hostname}:${server.address().port}`, close() { for (const socket of sockets) socket.destroy(); server.close() } }
+  return { server, frameKey, origin: `http://${hostname}:${server.address().port}`, close() { for (const socket of sockets) socket.destroy(); server.close() } }
 }

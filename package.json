@@ -2,7 +2,7 @@
   "name": "dsh-annotate-workspace",
   "private": true,
   "version": "0.0.0",
-  "description": "Monorepo for dsh-annotate, an element annotation and review panel for the DeepSeek Harness web client",
+  "description": "Monorepo for dsh-annotate, an element annotation and review panel for the DeepSeek Harness Desktop and web client",
   "license": "MIT",
   "type": "module",
   "repository": {

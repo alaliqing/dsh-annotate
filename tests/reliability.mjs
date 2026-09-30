@@ -28,11 +28,18 @@ const entry = resolve(repo, 'tests/review-fixture.cjs'); bundle(entry)
 const fixtureJs = `(function(){const process={env:{NODE_ENV:'production'}};const modules={${[...modules].map(([id,m])=>`${JSON.stringify(id)}:[function(module,exports,require){${m.src}\n},${JSON.stringify(m.deps)}]`).join(',')}};const cache={};function load(id){if(cache[id])return cache[id].exports;const module=cache[id]={exports:{}};const [fn,deps]=modules[id];fn(module,module.exports,n=>load(deps[n]));return module.exports}load(${JSON.stringify(entry)})})()`
 const routes = [], dispose = []
 apply({ effect(fn) { const clean = fn(); if (typeof clean === 'function') dispose.push(clean) }, webServer: { register: r => { routes.push(r) }, registerUpgrade() {} }, timer: {}, subprocess: {} }, { detect: { staticPorts: false } })
+let assetRevision = 1
 const app = http.createServer((req, res) => {
+  if (req.url === '/immutable.css' || req.url === '/immutable.js') {
+    const css = req.url.endsWith('.css')
+    res.writeHead(200, { 'content-type': css ? 'text/css' : 'text/javascript', 'cache-control': 'public, max-age=31536000, immutable', etag: '"fixed"' })
+    res.end(css ? `h1 { color: ${assetRevision === 1 ? '#202833' : '#7c3aed'} }` : `window.__assetRevision = ${assetRevision}`)
+    return
+  }
   if (req.url === '/absolute-redirect') { res.writeHead(302, { location: `http://127.0.0.1:${app.address().port}/destination?from=redirect#ready` }); res.end(); return }
   if (req.url.startsWith('/echo')) { res.setHeader('content-type','application/json'); res.end(JSON.stringify({ cookie:req.headers.cookie || '', url:req.url })); return }
   res.setHeader('content-type','text/html; charset=utf-8')
-  res.end(`<!doctype html><html><head><title>Review test</title><style>body{margin:0;font:14px system-ui;background:#f6f7f8;color:#202833}main{padding:28px}h1{font-size:25px}.scroller{height:240px;overflow:auto;border:1px solid #ccd3db;background:white;padding:20px}.spacer{height:75px}button{padding:12px 18px;background:#fff;border:1px solid #aab5c2;border-radius:8px}#after{height:1500px}</style></head><body><main><h1>Review workspace</h1><p>Real DOM, nested scrolling and route state</p><div class="scroller"><div class="spacer"></div><button class="hover:bg-blue-500 w-1/2" id="target:one">Review this element</button><div style="height:700px"></div></div><p><button id="route">Open second page</button></p><input id="draft" placeholder="Keep this form value"><div id="after"></div></main><script>document.querySelector('#route').onclick=()=>history.pushState({},'','/second?view=2#details')</script></body></html>`)
+  res.end(`<!doctype html><html><head><title>Review test</title><link rel="stylesheet" href="/immutable.css"><script src="/immutable.js"></script><style>body{margin:0;font:14px system-ui;background:#f6f7f8;color:#202833}main{padding:28px}h1{font-size:25px}.scroller{height:240px;overflow:auto;border:1px solid #ccd3db;background:white;padding:20px}.spacer{height:75px}button{padding:12px 18px;background:#fff;border:1px solid #aab5c2;border-radius:8px}#after{height:1500px}</style></head><body><main><h1>Review workspace</h1><p>Real DOM, nested scrolling and route state</p><div class="scroller"><div class="spacer"></div><button class="hover:bg-blue-500 w-1/2" id="target:one">Review this element</button><div style="height:700px"></div></div><p><button id="route">Open second page</button></p><input id="draft" placeholder="Keep this form value"><div id="after"></div></main><script>document.querySelector('#route').onclick=()=>history.pushState({},'','/second?view=2#details')</script></body></html>`)
 })
 app.on('upgrade', (req, socket) => {
   const accept = createHash('sha1').update(req.headers['sec-websocket-key'] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64')
@@ -91,6 +98,18 @@ try {
   const { chromium } = await loadPlaywright(); browser = await chromium.launch({channel:'chromium'})
   // The panel follows the browser language, so a zh-CN context is what makes
   // the Chinese assertions below the default-resolution path under test.
+  const nativePreview = await api('preview', { url: upstream + '/absolute-redirect', sid: 'desktop-browser', parentOrigin: 'dsh-app://app', lease: 'browser' })
+  const nativePage = await browser.newPage()
+  await nativePage.setContent(`<iframe id="native" src="${nativePreview.url}"></iframe>`)
+  const nativeFrame = nativePage.frameLocator('#native')
+  await nativeFrame.locator('h1').waitFor()
+  assert.equal(await nativeFrame.locator('body').evaluate(() => location.pathname + location.search + location.hash), '/destination?from=redirect#ready')
+  assert.equal(await nativeFrame.locator('body').evaluate(() => window.__DSH_ANNO__.parentOrigin), 'dsh-app://app')
+  await nativeFrame.locator('body').evaluate(() => location.reload())
+  await nativeFrame.locator('h1').waitFor()
+  await nativePage.close()
+  await api('releasePreview', { sid: 'desktop-browser', origin: nativePreview.origin, lease: 'browser' })
+  pass('Chromium loads and reloads desktop redirects and removes the capability before app scripts run')
   const context = await browser.newContext({viewport:{width:520,height:840},locale:'zh-CN'})
   const page = await context.newPage(); const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.log('BROWSER ERROR',e.message)});page.on('console',m=>{if(m.type()==='error')console.log('CONSOLE',m.text())});page.on('requestfailed',r=>console.log('REQUEST FAILED',r.url(),r.failure()))
   await page.goto(origin)
@@ -220,9 +239,12 @@ try {
   await page.evaluate(()=>{document.body.style.cssText='--dsw-alias-label-primary:#e9edf3;--dsw-alias-label-secondary:#a0aabd;--dsw-alias-bg-base:#11151b;--dsw-alias-bg-layer-1:#1a202a'});await page.screenshot({path:resolve(repo,'tests/shots/review-dark.png')});pass('narrow layout and light/dark screenshots')
   await pick('尚未提交的编辑草稿')
   await page.waitForTimeout(100)
+  assetRevision = 2
   await page.locator('button[title="重新载入"]').click()
   await frame.locator('.dsa-card textarea').waitFor()
   await page.waitForTimeout(150)
+  await frame.waitForFunction(() => window.__assetRevision === 2 && getComputedStyle(document.querySelector('h1')).color === 'rgb(124, 58, 237)')
+  pass('reload fetches edited CSS and JavaScript despite immutable upstream cache headers')
   assert.equal(await frame.locator('.dsa-card textarea').inputValue(),'尚未提交的编辑草稿');pass('in-progress editor draft survives reload')
   await frame.locator('.dsa-card textarea').press('Escape')
   await frame.waitForFunction(()=>!document.querySelector('.dsa-card'))

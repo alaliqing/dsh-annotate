@@ -10,6 +10,31 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-30
+
+### Fixed
+
+- Desktop previews now authenticate the initial iframe load from `dsh-app://app`,
+  including local redirects, while retaining loopback and request-origin guards.
+- The navigation capability is removed before app scripts run and is never
+  forwarded in upstream URLs or Referer headers, or included in annotation URLs.
+- Reloading the preview fetches current HTML, CSS and JavaScript even when the
+  development server advertises immutable caching or stale validators.
+- Installation instructions now cover the Desktop profile and full app restart.
+
+## [0.1.4] - 2026-09-29
+
+### Changed
+
+- Documented migration of legacy linked installations to the self-activating bundle.
+
+## [0.1.3] - 2026-09-29
+
+### Added
+
+- Declared the bundle patch and export so `dsh plugin add` automatically selects
+  and enables the plugin in a profile without a manual insertion.
+
 ## [0.1.2] - 2026-09-23
 
 ### Added
@@ -113,6 +138,9 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.5]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.5
+[0.1.4]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.4
+[0.1.3]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.3
 [0.1.2]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.2
 [0.1.1]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.1
 [0.1.0]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.0

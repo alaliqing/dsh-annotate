@@ -13,11 +13,18 @@ apply({
   webServer: { register(route) { routes.push(route) } }, timer: {}, subprocess: {},
 }, { detect: { staticPorts: false } })
 let upstream
+const upstreamRequests = []
 const app = http.createServer((req, res) => {
   const url = new URL(req.url, upstream)
+  upstreamRequests.push({ url: req.url, headers: req.headers })
   if (url.pathname === '/redirect') {
     res.writeHead(302, { location: url.searchParams.get('to') })
     res.end()
+    return
+  }
+  if (url.pathname === '/cached.css') {
+    res.writeHead(req.headers['if-none-match'] ? 304 : 200, { 'content-type': 'text/css', 'cache-control': 'public, max-age=31536000, immutable', etag: '"unchanged"' })
+    res.end('body { color: rebeccapurple }')
     return
   }
   res.writeHead(200, { 'content-type': 'text/html' })
@@ -88,6 +95,48 @@ try {
   assert.equal(response.headers.get('location'), external)
   await release(redirects, 'redirects', 'redirects')
   pass('same-upstream redirects retain the injected preview; external redirects stay explicit')
+
+  const desktop = await api('preview', { sid: 'desktop', root: workspace, url: secondUrl + '?view=2', lease: 'desktop', parentOrigin: 'dsh-app://app' })
+  const frameHeaders = { 'sec-fetch-site': 'cross-site', 'sec-fetch-dest': 'iframe' }
+  const desktopResponse = await fetch(desktop.url, { headers: frameHeaders })
+  assert.equal(desktopResponse.status, 200)
+  const desktopConfig = configOf(await desktopResponse.text())
+  assert.equal(desktopConfig.parentOrigin, 'dsh-app://app')
+  assert.equal(desktopConfig.page, secondUrl + '?view=2')
+  const withoutKey = new URL(desktop.url)
+  withoutKey.searchParams.delete('__dsh_anno_key')
+  assert.equal((await fetch(withoutKey, { headers: frameHeaders })).status, 403)
+  const wrongKey = new URL(desktop.url)
+  wrongKey.searchParams.set('__dsh_anno_key', 'wrong')
+  assert.equal((await fetch(wrongKey, { headers: frameHeaders })).status, 403)
+  assert.equal((await fetch(desktop.url, { headers: { ...frameHeaders, 'sec-fetch-dest': 'script' } })).status, 403)
+  const anotherDesktop = await api('preview', { sid: 'other-desktop', url: upstream, lease: 'other-desktop', parentOrigin: 'dsh-app://app' })
+  const stolenKey = new URL(anotherDesktop.url)
+  stolenKey.searchParams.set('__dsh_anno_key', new URL(desktop.url).searchParams.get('__dsh_anno_key'))
+  assert.equal((await fetch(stolenKey, { headers: frameHeaders })).status, 403)
+  const redirectedDesktop = await api('preview', { sid: 'desktop-redirect', url: upstream + '/redirect?to=' + encodeURIComponent(upstream + '/destination?q=1#end'), lease: 'redirect', parentOrigin: 'dsh-app://app' })
+  const nativeRedirect = await fetch(redirectedDesktop.url, { headers: frameHeaders, redirect: 'manual' })
+  const destination = new URL(nativeRedirect.headers.get('location'), redirectedDesktop.origin)
+  assert.equal(destination.searchParams.get('__dsh_anno_key'), new URL(redirectedDesktop.url).searchParams.get('__dsh_anno_key'))
+  assert.equal(destination.hash, '#end')
+  assert.equal((await fetch(destination, { headers: frameHeaders })).status, 200)
+  assert(!upstreamRequests.at(-1).url.includes('__dsh_anno_key'))
+  const asset = await fetch(redirectedDesktop.origin + '/cached.css', { headers: { referer: redirectedDesktop.url, 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'style', 'if-none-match': '"unchanged"', 'if-modified-since': new Date().toUTCString() } })
+  assert.equal(asset.status, 200)
+  assert.equal(asset.headers.get('cache-control'), 'no-store')
+  assert(!upstreamRequests.at(-1).headers.referer.includes('__dsh_anno_key'))
+  assert.equal(upstreamRequests.at(-1).headers['if-modified-since'], undefined)
+  const externalRedirect = new URL(redirectedDesktop.url)
+  externalRedirect.searchParams.set('to', external)
+  assert.equal((await fetch(externalRedirect, { headers: frameHeaders, redirect: 'manual' })).headers.get('location'), external)
+  const webParent = await api('preview', { sid: 'invalid-parent', url: upstream, lease: 'web', parentOrigin: 'https://evil.example' })
+  assert.equal(configOf(await (await fetch(webParent.url)).text()).parentOrigin, origin)
+  await release(desktop, 'desktop', 'desktop')
+  await release(webParent, 'invalid-parent', 'web')
+  await release(anotherDesktop, 'other-desktop', 'other-desktop')
+  await release(redirectedDesktop, 'desktop-redirect', 'redirect')
+  pass('desktop frames authenticate loads and redirects without exposing their capability to the upstream')
+  pass('preview assets bypass stale upstream validators and disable browser caching')
 
   const shared = await api('preview', { sid: 'shared', url: upstream, lease: 'window-a' })
   const otherWindow = await api('preview', { sid: 'shared', url: upstream, lease: 'window-b' })

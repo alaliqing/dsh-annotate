@@ -1,7 +1,7 @@
 # dsh-annotate
 
 Element annotation and review panel for the
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Desktop and web
 client. Open a local app you are already running, click the elements you want
 changed, write a note on each, and send the whole review to the conversation as
 one structured block.
@@ -15,14 +15,22 @@ annotation payload, configuration and the documented limits, see the
 Give a coding agent this prompt:
 
 ```text
-Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the local DeepSeek Harness web profile. Preserve existing configuration and do not stop the current Harness session. Verify the installation, then explain how to restart Harness and open Annotate.
+Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the active local DeepSeek Harness profile (desktop for the Desktop app, web for the browser). Preserve existing configuration and do not stop the current Harness session. Verify the installation, then explain how to restart Harness and open Annotate.
 ```
 
 Or install manually with Node.js 20+, the `dsh` CLI, and pnpm on `PATH`:
 
 ```sh
-dsh plugin --profile web add dsh-annotate
+# Desktop app
+dsh plugin --profile desktop add dsh-annotate@latest
+# Browser
+dsh plugin --profile web add dsh-annotate@latest
 ```
+
+For an existing `0.1.3` or newer install, run the same command to upgrade, then
+fully quit and reopen Desktop, or restart the web profile and refresh the browser.
+Desktop requires `0.1.5` or newer. Use the bundled Desktop CLI if `dsh` is not on
+`PATH`. In legacy upgrade commands below, use your actual profile in place of `web`.
 
 For a new install, version `0.1.3` and later registers and enables its own
 bundle. Version `0.1.2` and earlier used this manual entry in
@@ -79,13 +87,11 @@ If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
 
 ## Compatibility
 
-Chromium is the validated browser. A restartable, local DeepSeek Harness web
-client is required.
+Chromium is the validated browser. A restartable, local DeepSeek Harness
+Desktop or web client is required. Desktop preview support starts at `0.1.5`.
 
-A packed `0.1.3` checkout passed a native check with Harness Desktop
-`0.2.0-rc.2`; this does not verify an npm-published `0.1.3` package. See the
-[compatibility record](https://github.com/alaliqing/dsh-annotate/blob/main/docs/compatibility.md)
-for the environment and validation limits.
+See the [compatibility record](https://github.com/alaliqing/dsh-annotate/blob/main/docs/compatibility.md)
+for the tested environment and validation limits.
 
 Local development only: proxy targets are restricted to loopback, so a remote
 harness or a public deployment is out of scope.

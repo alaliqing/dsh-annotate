@@ -1,7 +1,7 @@
 {
   "name": "dsh-annotate",
-  "version": "0.1.4",
-  "description": "Element annotation and review panel for the DeepSeek Harness web client: pick UI elements in a live app preview, write notes, and send them to the conversation as one structured block",
+  "version": "0.1.5",
+  "description": "Element annotation and review panel for the DeepSeek Harness Desktop and web client: pick UI elements in a live app preview, write notes, and send them to the conversation as one structured block",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
