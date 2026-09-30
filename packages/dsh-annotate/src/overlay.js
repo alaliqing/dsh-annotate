@@ -543,8 +543,8 @@
     state.drafting = null
     state.viewing = null
     state.anchor = null
-    // Only the footer Mark button arms picking. Closing or saving a card
-    // returns the preview to normal interaction.
+    // Cancelling or viewing a card returns to normal interaction. A successful
+    // save explicitly resumes picking through setMode().
     if (state.mode === 'writing') state.mode = 'idle'
     state.selected = null
     render()
@@ -656,7 +656,7 @@
     save()
     var ship = state.sendOnCommit
     state.sendOnCommit = false
-    closeCard()
+    setMode(ship ? 'idle' : 'picking')
     renderPins()
     post('changed', { annotations: state.annotations })
     if (ship) post('send', { annotations: state.annotations })

@@ -79,8 +79,8 @@ function dsaI18n(preferred) {
       'list.addressLabel': 'Local service address',
       'list.openButton': 'Open',
       'list.helpHeader': 'Annotate inside the preview',
-      'list.helpPicking': 'Press Mark below, then click an element in the page and write a note. Enter saves it and leaves annotation mode.',
-      'list.helpEscape': 'Esc leaves annotation mode. Press Mark again whenever you want to add another note.',
+      'list.helpPicking': 'Press Mark below, then click an element in the page and write a note. Enter saves it so you can select the next element.',
+      'list.helpEscape': 'Press Esc or Mark again to leave annotation mode.',
       'list.helpCmdClick': '⌘/Ctrl+click an element = save it and send immediately.',
       'list.helpSendHeader': 'The list and sending',
       'list.helpSendList': 'The annotations button in the toolbar opens an in-flow list for locating and deleting comments. It never covers the preview.',
@@ -221,8 +221,8 @@ function dsaI18n(preferred) {
       'list.addressLabel': '本地服务地址',
       'list.openButton': '打开',
       'list.helpHeader': '在预览里标注',
-      'list.helpPicking': '点下面「标注」，然后点页面里的元素写批注，Enter 保存并退出标注状态。',
-      'list.helpEscape': 'Esc 退出标注状态；要再添加批注时，重新点「标注」。',
+      'list.helpPicking': '点下面「标注」，然后点页面里的元素写批注，Enter 保存后可直接选择下一个元素继续标注。',
+      'list.helpEscape': '按 Esc 或再次点「标注」退出标注状态。',
       'list.helpCmdClick': '⌘/Ctrl+点击元素 = 写完立即发送。',
       'list.helpSendHeader': '批注列表与发送',
       'list.helpSendList': '顶部工具栏的「批注」按钮可展开列表，逐条定位或删除，不遮挡预览页面。',
@@ -911,8 +911,8 @@ function dsaI18n(preferred) {
     state.drafting = null
     state.viewing = null
     state.anchor = null
-    // Only the footer Mark button arms picking. Closing or saving a card
-    // returns the preview to normal interaction.
+    // Cancelling or viewing a card returns to normal interaction. A successful
+    // save explicitly resumes picking through setMode().
     if (state.mode === 'writing') state.mode = 'idle'
     state.selected = null
     render()
@@ -1024,7 +1024,7 @@ function dsaI18n(preferred) {
     save()
     var ship = state.sendOnCommit
     state.sendOnCommit = false
-    closeCard()
+    setMode(ship ? 'idle' : 'picking')
     renderPins()
     post('changed', { annotations: state.annotations })
     if (ship) post('send', { annotations: state.annotations })

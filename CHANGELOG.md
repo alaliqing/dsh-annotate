@@ -10,6 +10,16 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-09-30
+
+### Fixed
+
+- Keep marking mode active after Enter or Save so another element can be
+  annotated immediately. Esc and the Mark button still exit marking mode;
+  Cmd/Ctrl-click still saves and sends the batch.
+- Show the language switch target in the toolbar: EN in the Chinese UI and
+  中 in the English UI, with matching tooltips and accessible labels.
+
 ## [0.1.9] - 2026-09-30
 
 ### Fixed
@@ -170,6 +180,7 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.10]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.10
 [0.1.9]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.9
 [0.1.8]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.8
 [0.1.7]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.7
