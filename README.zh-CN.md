@@ -13,7 +13,7 @@
 
 </div>
 
-`dsh-annotate` 为 DeepSeek Harness 网页端增加了一个可视化评审面板。打开本地应用，
+`dsh-annotate` 为 DeepSeek Harness Desktop 和网页端增加了一个可视化评审面板。打开本地应用，
 点选想改的元素，逐条留下意见，再把整份评审以结构化文本发进当前对话。
 
 ![dsh-annotate 中的本地应用、批注列表和页面编号标记](docs/panel-overview.webp)
@@ -27,14 +27,21 @@
 把下面这段话交给能访问 Harness 所在电脑的编程助手：
 
 ```text
-阅读 https://github.com/alaliqing/dsh-annotate，按说明将最新已发布版本安装到本机 DeepSeek Harness 的 web profile。保留已有配置，不要中断当前 Harness 会话。验证安装结果，并说明如何重启 Harness、打开「标注」面板。
+阅读 https://github.com/alaliqing/dsh-annotate，按说明将最新已发布版本安装到本机 DeepSeek Harness 当前使用的 profile（桌面端为 desktop，浏览器为 web）。保留已有配置，不要中断当前 Harness 会话。验证安装结果，并说明如何重启 Harness、打开「标注」面板。
 ```
 
 也可以手动安装，需要 Node.js 20+、`dsh` CLI 和 `PATH` 中可用的 pnpm：
 
 ```sh
-dsh plugin --profile web add dsh-annotate
+# 桌面端
+dsh plugin --profile desktop add dsh-annotate@latest
+# 浏览器
+dsh plugin --profile web add dsh-annotate@latest
 ```
+
+已安装 `0.1.3` 或更新版本时，执行同一命令升级，然后彻底退出并重新打开
+Desktop，或重启 web profile 并刷新浏览器。Desktop 需要 `0.1.5` 或更新版本；
+如果 `PATH` 中没有 `dsh`，可使用 Desktop 应用自带的 CLI。
 
 全新安装时，`0.1.3` 及后续版本自带 bundle 补丁，`dsh plugin add` 会自动登记
 并启用插件。`0.1.2` 及更早版本曾在 `$DSH_HOME/profiles/web/cordis.patch.yml`
@@ -44,6 +51,8 @@ dsh plugin --profile web add dsh-annotate
 - insert:
     - name: dsh-annotate
 ```
+
+以下旧版升级命令中的 `web`，应替换为你实际使用的 profile，例如 `desktop`。
 
 升级已有的 `0.1.2` 或更早版本时，先移除再添加包，让 DSH 登记新的 bundle；
 只更新原有依赖可能不会将它加入 profile 的 bundle 列表：

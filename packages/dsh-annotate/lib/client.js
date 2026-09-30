@@ -858,7 +858,7 @@ function apply(ctx) {
     panel.openRequest = request
     panel.model.set({ loading: true, error: null, view: 'page', input: url })
     const lease = crypto.randomUUID()
-    const preview = await api('preview', { sid: panel.sid, url, root: panel.model.get().root, lease })
+    const preview = await api('preview', { sid: panel.sid, url, root: panel.model.get().root, lease, parentOrigin: location.origin })
     if (panel.openRequest !== request) {
       if (preview.ok) void api('releasePreview', { sid: panel.sid, origin: preview.origin, lease })
       return false

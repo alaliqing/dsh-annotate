@@ -19,6 +19,16 @@
   if (!cfg || !cfg.upstream) return
   window.__DSH_ANNO_SESSION__ = cfg.session || 'standalone'
 
+  // The desktop navigation capability has already been checked by the host.
+  // Remove it before app scripts, routers and subresource Referers see it.
+  try {
+    var cleanUrl = new URL(location.href)
+    if (cfg.parentOrigin === 'dsh-app://app' && cleanUrl.searchParams.has('__dsh_anno_key')) {
+      cleanUrl.searchParams.delete('__dsh_anno_key')
+      history.replaceState(history.state, '', cleanUrl.href)
+    }
+  } catch (error) { void error }
+
   var PROXIED = location.origin + cfg.prefix // '/' in the preview origin
   var withSlash = cfg.prefix.slice(-1) === '/' ? cfg.prefix : cfg.prefix + '/'
 
@@ -163,14 +173,15 @@
 
   // ---- navigation reporting ----------------------------------------------
   function upstreamHref() {
-    if (cfg.fileRoot) return new URL('.' + location.pathname + location.search + location.hash, cfg.fileRoot).href
+    var query = location.search
+    if (cfg.fileRoot) return new URL('.' + location.pathname + query + location.hash, cfg.fileRoot).href
     if (cfg.page) {
       var page = new URL(cfg.page)
-      page.search = location.search
+      page.search = query
       page.hash = location.hash
       return page.href
     }
-    var href = location.href
+    var href = location.origin + location.pathname + query + location.hash
     if (href.indexOf(PROXIED) !== 0) return href
     var rest = href.slice(PROXIED.length)
     return cfg.upstream.replace(/\/$/, '') + '/' + rest

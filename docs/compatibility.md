@@ -1,6 +1,27 @@
 # Harness compatibility
 
-## Native acceptance: 2026-09-29
+## Desktop preview repair: 2026-09-30
+
+`0.1.4` and earlier did not authenticate preview frames loaded by the actual
+Desktop `dsh-app://app` renderer. A web profile launched with the Desktop CLI
+does not exercise that custom scheme. `0.1.5` supports the native parent,
+uses a per-preview navigation capability for its initial load and local
+redirects, removes that capability from application URLs, and bypasses stale
+preview asset caches on reload.
+
+The `0.1.5` packed checkout passed `npm test` and the isolated real-Harness
+web check below on macOS Apple Silicon with Desktop CLI `0.2.0-rc.2`, Node
+`25.5.0` and Chromium `153.0.8010.12`. The model fixture received the selector
+and annotation while the unrelated draft remained unsent. HTTP and Chromium
+regressions also cover native frame capabilities, redirects, reloads and
+changed CSS/JavaScript with immutable upstream cache headers.
+
+The actual Desktop window was also fully restarted with this checkout. Its
+`dsh-app://app` renderer opened the running type-design website and reloaded
+it successfully; the application and panel URLs contained no navigation key.
+This native UI check is separate from the automated web-profile acceptance.
+
+## Packed web-profile acceptance: 2026-09-29
 
 | Component | Tested version or environment |
 | --- | --- |
@@ -36,7 +57,7 @@ preview. This published-package check covered installation, composition, and
 the panel and preview UI; the send-to-session check above used the packed
 checkout and a local model fixture.
 
-## Earlier native acceptance: 2026-09-22
+## Earlier web-profile acceptance: 2026-09-22
 
 | Component | Verified version |
 | --- | --- |
@@ -55,7 +76,7 @@ combinations, not a promise of support for every earlier or later Harness build.
 Node 20/22/24 build checks and the ordinary Chromium suite use the repository
 fixture; they are separate from native Harness acceptance.
 
-## Reproduce the native check
+## Reproduce the packed web-profile check
 
 Install the repository dependencies and Chromium as described in the README.
 The check also needs the official `dsh` CLI and pnpm on `PATH`:
