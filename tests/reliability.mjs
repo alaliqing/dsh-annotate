@@ -30,6 +30,7 @@ const routes = [], dispose = []
 apply({ effect(fn) { const clean = fn(); if (typeof clean === 'function') dispose.push(clean) }, webServer: { register: r => { routes.push(r) }, registerUpgrade() {} }, timer: {}, subprocess: {} }, { detect: { staticPorts: false } })
 let assetRevision = 1
 const app = http.createServer((req, res) => {
+  if (req.url === '/encoded-redirect') { res.writeHead(302, { location: '/destination?from=redirect&q=a%20b&plus=%2B#ready' }); res.end(); return }
   if (req.url === '/immutable.css' || req.url === '/immutable.js') {
     const css = req.url.endsWith('.css')
     res.writeHead(200, { 'content-type': css ? 'text/css' : 'text/javascript', 'cache-control': 'public, max-age=31536000, immutable', etag: '"fixed"' })
@@ -98,12 +99,12 @@ try {
   const { chromium } = await loadPlaywright(); browser = await chromium.launch({channel:'chromium'})
   // The panel follows the browser language, so a zh-CN context is what makes
   // the Chinese assertions below the default-resolution path under test.
-  const nativePreview = await api('preview', { url: upstream + '/absolute-redirect', sid: 'desktop-browser', parentOrigin: 'dsh-app://app', lease: 'browser' })
+  const nativePreview = await api('preview', { url: upstream + '/encoded-redirect', sid: 'desktop-browser', parentOrigin: 'dsh-app://app', lease: 'browser' })
   const nativePage = await browser.newPage()
   await nativePage.setContent(`<iframe id="native" src="${nativePreview.url}"></iframe>`)
   const nativeFrame = nativePage.frameLocator('#native')
   await nativeFrame.locator('h1').waitFor()
-  assert.equal(await nativeFrame.locator('body').evaluate(() => location.pathname + location.search + location.hash), '/destination?from=redirect#ready')
+  assert.equal(await nativeFrame.locator('body').evaluate(() => location.pathname + location.search + location.hash), '/destination?from=redirect&q=a%20b&plus=%2B#ready')
   assert.equal(await nativeFrame.locator('body').evaluate(() => window.__DSH_ANNO__.parentOrigin), 'dsh-app://app')
   await nativeFrame.locator('body').evaluate(() => location.reload())
   await nativeFrame.locator('h1').waitFor()

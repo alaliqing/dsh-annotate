@@ -24,7 +24,9 @@
   try {
     var cleanUrl = new URL(location.href)
     if (cfg.parentOrigin === 'dsh-app://app' && cleanUrl.searchParams.has('__dsh_anno_key')) {
-      cleanUrl.searchParams.delete('__dsh_anno_key')
+      cleanUrl.search = cleanUrl.search.slice(1).split('&').filter(function (part) {
+        return !new URLSearchParams(part).has('__dsh_anno_key')
+      }).join('&')
       history.replaceState(history.state, '', cleanUrl.href)
     }
   } catch (error) { void error }

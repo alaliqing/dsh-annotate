@@ -10,6 +10,14 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-30
+
+### Fixed
+
+- Preserve the exact encoding of application query strings when adding and
+  removing the Desktop frame capability, including redirects and file previews.
+  Encoded spaces and literal plus signs keep their original URL identities.
+
 ## [0.1.5] - 2026-09-30
 
 ### Fixed
@@ -138,6 +146,7 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.6]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.6
 [0.1.5]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.5
 [0.1.4]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.4
 [0.1.3]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.3
