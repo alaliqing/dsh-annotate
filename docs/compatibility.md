@@ -9,7 +9,10 @@ uses a per-preview navigation capability for its initial load and local
 redirects, removes that capability from application URLs, and bypasses stale
 preview asset caches on reload.
 
-The `0.1.5` packed checkout passed `npm test` and the isolated real-Harness
+`0.1.6` also preserves the original query encoding while adding and removing
+the capability, including encoded spaces and literal plus signs.
+
+The `0.1.6` packed checkout passed `npm test` and the isolated real-Harness
 web check below on macOS Apple Silicon with Desktop CLI `0.2.0-rc.2`, Node
 `25.5.0` and Chromium `153.0.8010.12`. The model fixture received the selector
 and annotation while the unrelated draft remained unsent. HTTP and Chromium

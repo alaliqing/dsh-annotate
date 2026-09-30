@@ -178,6 +178,18 @@ const originOf = (value) => {
   }
 }
 
+function clearFrameKey(url) {
+  if (!url.searchParams.has('__dsh_anno_key')) return
+  // URLSearchParams.delete/set would normalize every other query value too,
+  // changing full-URL annotation identities and signed application URLs.
+  url.search = url.search.slice(1).split('&').filter((part) => !new URLSearchParams(part).has('__dsh_anno_key')).join('&')
+}
+
+function addFrameKey(url, key) {
+  clearFrameKey(url)
+  url.search += (url.search ? '&' : '?') + '__dsh_anno_key=' + encodeURIComponent(key)
+}
+
 /** A preview server must never become a readable gateway for an unrelated page.
  *  Chromium sends fetch metadata; Firefox and Safari send none, so fall back to
  *  the browser's own Origin/Referer. */
@@ -868,7 +880,7 @@ export function apply(ctx, config = {}) {
         const entry = await previews.get(key)
         if (disposed) { entry.close(); return send(res, 503, { ok: false, error: 'plugin is shutting down' }) }
         const frameUrl = new URL(entry.origin + suffix)
-        if (entry.frameKey) frameUrl.searchParams.set('__dsh_anno_key', entry.frameKey)
+        if (entry.frameKey) addFrameKey(frameUrl, entry.frameKey)
         return send(res, 200, { ok: true, url: frameUrl.href, origin: entry.origin })
       }
       if (method === 'retainPreview' || method === 'releasePreview') {
@@ -1009,7 +1021,7 @@ function proxyHttp(req, res, preview) {
       // The preview keeps the app's own paths, so only the origin changes.
       try {
         const ref = new URL(value)
-        if (preview.frameKey && ref.searchParams.has('__dsh_anno_key')) ref.searchParams.delete('__dsh_anno_key')
+        if (preview.frameKey) clearFrameKey(ref)
         headers.referer = origin + ref.pathname + ref.search
       } catch (error) { void error }
       continue
@@ -1049,7 +1061,7 @@ function proxyHttp(req, res, preview) {
             if (destination.origin === origin) {
               // The initial custom-scheme iframe has no Referer on a redirect
               // either. Keep its capability on local redirects only.
-              if (preview.frameKey && req.headers['sec-fetch-dest'] === 'iframe') destination.searchParams.set('__dsh_anno_key', preview.frameKey)
+              if (preview.frameKey && req.headers['sec-fetch-dest'] === 'iframe') addFrameKey(destination, preview.frameKey)
               out.location = destination.pathname + destination.search + destination.hash
             } else out.location = value
           } catch { out.location = value }
@@ -1190,7 +1202,7 @@ async function createPreview(target, sid, parentOrigin, fileRoot, touch) {
     // retaining provenance checks for unrelated pages and subresource fetches.
     const keyedFrame = frameKey && req.headers['sec-fetch-dest'] === 'iframe' && frameUrl.searchParams.get('__dsh_anno_key') === frameKey
     if (!keyedFrame && !allowedPreviewRequest(req, parentOrigin, originOfPreview())) { res.writeHead(403); res.end(); return }
-    if (frameKey && frameUrl.searchParams.has('__dsh_anno_key')) frameUrl.searchParams.delete('__dsh_anno_key')
+    if (frameKey) clearFrameKey(frameUrl)
     req.url = frameUrl.pathname + frameUrl.search
     touch()
     proxyHttp(req, res, preview)
