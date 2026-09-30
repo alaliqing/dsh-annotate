@@ -10,6 +10,14 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-09-30
+
+### Fixed
+
+- Follow the overlay's actual page URL when reusing an existing iframe after
+  a redirect. Annotation storage, submitted context and accepted-send cleanup
+  stay aligned even when reopening the same redirect address.
+
 ## [0.1.8] - 2026-09-30
 
 ### Fixed
@@ -162,6 +170,7 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.9]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.9
 [0.1.8]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.8
 [0.1.7]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.7
 [0.1.6]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.6
