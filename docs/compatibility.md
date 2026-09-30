@@ -41,6 +41,18 @@ cache headers. That check also exposed the undeclared-charset issue fixed in
 `0.1.8`. These native checks are separate from automated web-profile acceptance.
 Windows and Linux native windows have not been exercised.
 
+The published `0.1.9` package passed native macOS acceptance after another full
+quit and restart with Desktop CLI `0.2.0-rc.2`. Reopening the same redirect kept
+the final encoded query/hash URL; Chinese controls and notes worked on an
+undeclared-charset page. The real DeepSeek provider returned the requested
+receipt, accepted notes and pins cleared while an unrelated composer draft
+remained unsent, and reload displayed edited CSS and JavaScript despite
+immutable upstream caching. Workspace-file preview, title picking and Esc
+cleanup also passed. Existing Desktop and web profiles each have exactly one
+`0.1.9` bundle and no peer dependency issues. Temporary, user-approved package-age
+exceptions were removed after installation. These results cover macOS Apple
+Silicon; Windows and Linux native acceptance remains untested.
+
 ## Packed web-profile acceptance: 2026-09-29
 
 | Component | Tested version or environment |
