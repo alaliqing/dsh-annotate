@@ -10,6 +10,14 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-09-30
+
+### Fixed
+
+- Keep injected scripts ASCII so Chinese annotation labels and Unicode
+  configuration remain correct on pages without a charset declaration or with
+  a legacy document encoding. The application's encoding is unchanged.
+
 ## [0.1.7] - 2026-09-30
 
 ### Fixed
@@ -154,6 +162,7 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.8]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.8
 [0.1.7]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.7
 [0.1.6]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.6
 [0.1.5]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.5

@@ -979,10 +979,15 @@ function rewriteSetCookie(value, enc, target) {
  * app's. Only the annotation config, the shim and the overlay are added.
  */
 function injectIntoHtml(html, config) {
+  // Inline scripts inherit the document's encoding. Keep our source ASCII so
+  // localized labels and config survive pages without a charset declaration
+  // (or with a legacy charset), without changing the application's encoding.
+  const script = (source) => source.replace(/[^\x00-\x7f]/g, (character) =>
+    '\\u' + character.charCodeAt(0).toString(16).padStart(4, '0'))
   const head =
-    `<script>window.__DSH_ANNO__=${JSON.stringify(config).replace(/</g, '\\u003c')};</script>` +
-    `<script>${SHIM_SRC}</script>` +
-    (config.isolated ? `<script>${OVERLAY_SRC}</script>` : '')
+    `<script>window.__DSH_ANNO__=${script(JSON.stringify(config).replace(/</g, '\\u003c'))};</script>` +
+    `<script>${script(SHIM_SRC)}</script>` +
+    (config.isolated ? `<script>${script(OVERLAY_SRC)}</script>` : '')
   return /<head[^>]*>/i.test(html)
     ? html.replace(/<head[^>]*>/i, (match) => match + head)
     : /<html[^>]*>/i.test(html)
