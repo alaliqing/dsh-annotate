@@ -10,6 +10,14 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-09-30
+
+### Fixed
+
+- Mark Cordis as an optional peer: Harness supplies its runtime, and the plugin
+  does not import an external Cordis package. Desktop and web profiles no longer
+  report a missing mandatory peer when installing the plugin.
+
 ## [0.1.6] - 2026-09-30
 
 ### Fixed
@@ -146,6 +154,7 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.7]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.7
 [0.1.6]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.6
 [0.1.5]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.5
 [0.1.4]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.4

@@ -12,6 +12,9 @@ preview asset caches on reload.
 `0.1.6` also preserves the original query encoding while adding and removing
 the capability, including encoded spaces and literal plus signs.
 
+`0.1.7` marks the externally installed Cordis peer as optional because Harness
+supplies the runtime and the plugin does not import that package.
+
 The `0.1.6` packed checkout passed `npm test` and the isolated real-Harness
 web check below on macOS Apple Silicon with Desktop CLI `0.2.0-rc.2`, Node
 `25.5.0` and Chromium `153.0.8010.12`. The model fixture received the selector
