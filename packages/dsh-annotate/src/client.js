@@ -975,10 +975,10 @@ function apply(ctx) {
             className: 'dsa-ico dsa-lang',
             type: 'button',
             title: t('panel.languageSwitch', { lang: i18n.nextLabel() }),
-            'aria-label': t('panel.language'),
+            'aria-label': t('panel.languageSwitch', { lang: i18n.nextLabel() }),
             onClick: () => switchLanguage(panel),
           },
-          i18n.label()
+          i18n.nextLabel()
         )
       ),
       annotations.length && state.listOpen

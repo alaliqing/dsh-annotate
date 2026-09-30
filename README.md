@@ -104,12 +104,14 @@ configured command.
 3. Choose a detected service or one of the workspace's static pages, or enter a
    port or loopback URL.
 4. Click **Mark**, select an element, and write a note.
-5. Click a numbered marker to view its note; click elsewhere to close it. Press **Mark** to add another note.
+5. Press **Enter** or click **Save**, then select the next element to keep
+   annotating. Press **Esc** or **Mark** again to exit. Click a numbered marker
+   to view its note; click elsewhere to close it.
 6. Choose **Add to composer** or **Send annotations**.
 
 | Key | Action |
 | --- | --- |
-| `Enter` | Save and leave marking mode |
+| `Enter` | Save and continue marking |
 | `Shift+Enter` | Insert a newline |
 | `Esc` | Cancel and leave marking mode |
 | `⌘/Ctrl` + click | Save and send the batch |
