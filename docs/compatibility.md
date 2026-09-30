@@ -19,6 +19,10 @@ supplies the runtime and the plugin does not import that package.
 pages without a charset declaration and pages with a legacy document encoding.
 Chromium regression checks cover both cases, including saved Chinese notes.
 
+`0.1.9` also synchronizes the actual overlay URL when reopening an unchanged
+iframe source after a redirect. Regression checks reproduce the 0.1.8 failure
+and verify the final address and accepted-send cleanup on the redirected page.
+
 The `0.1.6` packed checkout passed `npm test` and the isolated real-Harness
 web check below on macOS Apple Silicon with Desktop CLI `0.2.0-rc.2`, Node
 `25.5.0` and Chromium `153.0.8010.12`. The model fixture received the selector

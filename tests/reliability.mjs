@@ -349,10 +349,21 @@ try {
   await page.waitForFunction(url => document.querySelector('.dsa-url')?.value === url && !document.querySelector('.dsa-empty'), upstream + '/destination?from=redirect#ready')
   frame = page.frames().find(f => f.url().includes('/destination'))
   assert(frame && new URL(frame.url()).hostname === 'localhost')
+  const redirectedUrl = upstream + '/destination?from=redirect#ready'
+  // Reopening the same iframe source sends ping rather than another load.
+  // Its ready message must keep the final URL as the annotation storage key.
+  await page.locator('.dsa-url').fill(upstream + '/absolute-redirect')
+  await page.locator('.dsa-url').press('Enter')
+  await page.waitForFunction(url => document.querySelector('.dsa-url')?.value === url, redirectedUrl, {timeout:3000})
   await pick('跳转后仍可标注')
   await frame.locator('.dsa-card textarea').press('Enter')
   await frame.waitForFunction(() => document.querySelector('.dsa-pin')?.title === '跳转后仍可标注')
   pass('absolute redirects keep the live overlay and element picking')
+  await page.getByRole('button',{name:'发送批注',exact:true}).click()
+  await frame.waitForFunction(() => !document.querySelector('.dsa-pin'))
+  assert.equal(await page.locator('button[title="暂无批注"]').count(),1)
+  assert((await page.evaluate(() => reviewTest.calls.at(-1).content[0].text)).includes(redirectedUrl))
+  pass('reopening a redirect keeps the final URL and accepted sends clear its stored notes and pins')
   await page.locator('.dsa-url').fill('http://127.0.0.1:1/');await page.locator('.dsa-url').press('Enter')
   await page.waitForFunction(()=>document.querySelector('.dsa-empty')?.textContent.includes('预览暂时不可用'))
   assert(await page.getByRole('button',{name:'重试',exact:true}).isVisible());pass('unavailable service shows error and retry')

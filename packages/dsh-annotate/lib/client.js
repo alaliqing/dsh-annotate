@@ -926,6 +926,15 @@ function apply(ctx) {
     try { localStorage.setItem(annotationKey(panel, url), JSON.stringify(annotations)) }
     catch { flash(panel, t('notice.storageUnavailable')) }
   }
+  const followNavigation = (panel, url) => {
+    const current = panel.model.get()
+    if (!url || url === current.url) return
+    const expected = panel.historyTarget
+    const isTraversal = expected !== undefined && current.history[expected] === url
+    const history = isTraversal ? current.history : current.history.slice(0, current.index + 1).concat([url])
+    panel.historyTarget = undefined
+    panel.model.set({ url, input: url, history: history.slice(-40), index: isTraversal ? expected : Math.min(history.length - 1, 39), annotations: readAnnotations(panel, url), mode: 'idle', listOpen: false })
+  }
   const sendAll = async (panel, setDraft, options) => {
     const state = panel.model.get()
     if (!state.annotations.length || state.sending) return false
@@ -1076,6 +1085,10 @@ function apply(ctx) {
         if (!data) return
         if (data.source === CHANNEL_IN) {
           if (data.type === 'ready' || data.type === 'changed') {
+            // Reusing an already loaded iframe only sends ping: there is no
+            // new load/navigation event after an HTTP redirect. Follow the
+            // overlay's actual URL before restoring or clearing its notes.
+            followNavigation(panel, data.url)
             const current = panel.model.get()
             const pageUrl = data.url || current.url
             if (data.type === 'ready') {
@@ -1110,13 +1123,7 @@ function apply(ctx) {
         if (data.source === PAGE_CHANNEL && data.type === 'error') { panel.model.set({ loading: false, error: hostMessage({ code: data.code, error: data.message }, 'notice.previewFailed') }); return }
         if (data.source === PAGE_CHANNEL && data.type === 'navigated' && data.url) {
           // SPA route change: follow it in the address bar and remember it.
-          const current = panel.model.get()
-          if (data.url === current.url) return
-          const expected = panel.historyTarget
-          const isTraversal = expected !== undefined && current.history[expected] === data.url
-          const history = isTraversal ? current.history : current.history.slice(0, current.index + 1).concat([data.url])
-          panel.historyTarget = undefined
-          panel.model.set({ url: data.url, input: data.url, history: history.slice(-40), index: isTraversal ? expected : Math.min(history.length - 1, 39), annotations: readAnnotations(panel, data.url), mode: 'idle', listOpen: false })
+          followNavigation(panel, data.url)
         }
       }
       window.addEventListener('message', onMessage)
