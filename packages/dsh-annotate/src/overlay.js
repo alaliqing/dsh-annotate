@@ -73,8 +73,10 @@
       'font:12px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:' + ink + '}',
       '.dsa-layer *{box-sizing:border-box}.dsa-layer::backdrop{display:none}',
       '.dsa-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}',
-      // capture surface (only while picking) — swallows app clicks
-      '.dsa-capture{position:absolute;inset:0;z-index:1;pointer-events:auto;cursor:crosshair}',
+      // Clicks are intercepted at window capture; leave hit testing and wheel
+      // gestures on the real app so the browser keeps its native scroll path.
+      '.dsa-capture{position:absolute;inset:0;z-index:1;pointer-events:none}',
+      'html[data-dsa-mode] body,html[data-dsa-mode] body *{cursor:crosshair!important}',
       // measurement frame
       '.dsa-frame{position:absolute;z-index:3;pointer-events:none;border:1px solid ' + MARKER + ';',
       'background:color-mix(in srgb,' + MARKER + ' 8%,transparent);transition:opacity .12s ease}',
@@ -343,20 +345,41 @@
     var active = state.mode !== 'idle'
     if (active && capture.parentNode !== root) root.insertBefore(capture, pinLayer)
     if (!active && capture.parentNode === root) root.removeChild(capture)
+    if (active) document.documentElement.setAttribute('data-dsa-mode', state.mode)
+    else document.documentElement.removeAttribute('data-dsa-mode')
   }
 
-  /**
-   * The capture surface owns the pointer while reviewing, so `event.target` is
-   * always the surface itself. Resolve the real element under the cursor by
-   * asking the document with our own hit-testing switched off for one call.
-   */
+  /** The inert overlay leaves the real app in the browser's hit-test tree. */
   function elementAt(x, y) {
-    var previous = capture.style.pointerEvents
-    capture.style.pointerEvents = 'none'
     var el = document.elementFromPoint(x, y)
-    capture.style.pointerEvents = previous || 'auto'
     if (!el || el === root || root.contains(el)) return null
     return el
+  }
+
+  // Measurements only live for one update. Shared clipping ancestors are read
+  // once per frame, and no cached rectangle survives a scroll or layout change.
+  var measurements = null
+  function withMeasurements(callback) {
+    var previous = measurements
+    measurements = previous || new WeakMap()
+    try { return callback() } finally { measurements = previous }
+  }
+
+  function measurement(el) {
+    if (!measurements) return {}
+    var value = measurements.get(el)
+    if (!value) { value = {}; measurements.set(el, value) }
+    return value
+  }
+
+  function rectOf(el) {
+    var value = measurement(el)
+    if (!value.rect) value.rect = el.getBoundingClientRect()
+    return value.rect
+  }
+
+  function setStyle(el, key, value) {
+    if (el.style[key] !== value) el.style[key] = value
   }
 
   function render() {
@@ -367,26 +390,16 @@
     renderPins()
   }
 
-  function renderFrame() {
+  function framePosition() {
     var target = state.selected || state.hover
-    if (!target || !target.isConnected || !visibleRect(target)) {
-      frame.style.display = 'none'
-      readout.style.display = 'none'
-      return
-    }
-    var rect = target.getBoundingClientRect()
-    frame.style.display = 'block'
-    frame.setAttribute('data-state', state.selected ? 'selected' : 'hover')
-    frame.style.left = rect.left + 'px'
-    frame.style.top = rect.top + 'px'
-    frame.style.width = rect.width + 'px'
-    frame.style.height = rect.height + 'px'
-
-    readout.style.display = 'flex'
-    readout.innerHTML =
+    var visible = visibleRect(target)
+    if (!visible) return null
+    var rect = visible.rect
+    var component = componentOf(target)
+    var content =
       '<b>' + esc(target.tagName.toLowerCase()) + '</b>' +
       (target.getAttribute('class') ? '<span>.' + esc(clip(target.getAttribute('class'), 28).split(' ')[0]) + '</span>' : '') +
-      (componentOf(target) ? '<span>· ' + esc(componentOf(target)) + '</span>' : '') +
+      (component ? '<span>· ' + esc(component) + '</span>' : '') +
       '<span>· ' + Math.round(rect.width) + '×' + Math.round(rect.height) + '</span>'
     var top = rect.top - 26
     // A pin is anchored to the element's top edge, so a readout directly above
@@ -394,7 +407,7 @@
     var annotated = state.annotations.some(function (ann) {
       var el = elementFor(ann)
       if (!el || !el.isConnected) return false
-      var other = el.getBoundingClientRect()
+      var other = rectOf(el)
       return Math.abs(other.left + other.width / 2 - (rect.left + rect.width / 2)) < 2 &&
         Math.abs(other.top - rect.top) < 2
     })
@@ -410,13 +423,33 @@
         top = rect.bottom + 6
       }
     }
-    readout.style.left = left + 'px'
-    readout.style.top = top + 'px'
+    return { rect: rect, content: content, left: left, top: top, selected: !!state.selected }
   }
 
-  function anchorCard() {
-    if (!card || !state.anchor || !state.anchor.isConnected) return
-    var rect = state.anchor.getBoundingClientRect()
+  function renderFrame(position) {
+    if (arguments.length === 0) position = withMeasurements(framePosition)
+    if (!position) {
+      setStyle(frame, 'display', 'none')
+      setStyle(readout, 'display', 'none')
+      return
+    }
+    var rect = position.rect
+    var nextState = position.selected ? 'selected' : 'hover'
+    if (frame.getAttribute('data-state') !== nextState) frame.setAttribute('data-state', nextState)
+    setStyle(frame, 'display', 'block')
+    setStyle(frame, 'left', rect.left + 'px')
+    setStyle(frame, 'top', rect.top + 'px')
+    setStyle(frame, 'width', rect.width + 'px')
+    setStyle(frame, 'height', rect.height + 'px')
+    setStyle(readout, 'display', 'flex')
+    if (readout.innerHTML !== position.content) readout.innerHTML = position.content
+    setStyle(readout, 'left', position.left + 'px')
+    setStyle(readout, 'top', position.top + 'px')
+  }
+
+  function cardPosition() {
+    if (!card || !state.anchor || !state.anchor.isConnected) return null
+    var rect = rectOf(state.anchor)
     var width = card.offsetWidth || 304
     var height = card.offsetHeight || 168
     var gap = 12
@@ -428,8 +461,14 @@
     else left = Math.min(rect.left, window.innerWidth - width - 8)
     var top = rect.top
     if (top + height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - height - 8)
-    card.style.left = Math.max(8, left) + 'px'
-    card.style.top = Math.max(8, top) + 'px'
+    return { left: Math.max(8, left), top: Math.max(8, top) }
+  }
+
+  function anchorCard(position) {
+    if (arguments.length === 0) position = withMeasurements(cardPosition)
+    if (!card || !position) return
+    setStyle(card, 'left', position.left + 'px')
+    setStyle(card, 'top', position.top + 'px')
   }
 
   /** Where a pin belongs right now, in viewport coordinates: the element's live
@@ -447,23 +486,35 @@
     return el
   }
 
-  function visibleRect(el) {
-    if (!el || !el.isConnected || !el.getClientRects().length) return null
-    var rect = el.getBoundingClientRect()
-    var bounds = { left: 0, top: 0, right: innerWidth, bottom: innerHeight }
-    for (var node = el.parentElement; node && node !== document.documentElement; node = node.parentElement) {
+  function clippingBounds(node) {
+    if (!node || node === document.documentElement) return { left: 0, top: 0, right: innerWidth, bottom: innerHeight }
+    var value = measurement(node)
+    if (!value.bounds) {
+      var bounds = Object.assign({}, clippingBounds(node.parentElement))
       var style = getComputedStyle(node)
-      var box = node.getBoundingClientRect()
-      if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) {
+      var clipsX = /(auto|scroll|hidden|clip)/.test(style.overflowX)
+      var clipsY = /(auto|scroll|hidden|clip)/.test(style.overflowY)
+      var box = clipsX || clipsY ? rectOf(node) : null
+      if (clipsX) {
         bounds.left = Math.max(bounds.left, box.left)
         bounds.right = Math.min(bounds.right, box.right)
       }
-      if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) {
+      if (clipsY) {
         bounds.top = Math.max(bounds.top, box.top)
         bounds.bottom = Math.min(bounds.bottom, box.bottom)
       }
+      value.bounds = bounds
     }
-    if (rect.width <= 0 || rect.height <= 0 || rect.bottom <= bounds.top || rect.top >= bounds.bottom ||
+    return value.bounds
+  }
+
+  function visibleRect(el) {
+    if (!el || !el.isConnected) return null
+    var rect = rectOf(el)
+    if (rect.width <= 0 || rect.height <= 0 || rect.bottom <= 0 || rect.top >= innerHeight ||
+        rect.right <= 0 || rect.left >= innerWidth) return null
+    var bounds = clippingBounds(el.parentElement)
+    if (rect.bottom <= bounds.top || rect.top >= bounds.bottom ||
         rect.right <= bounds.left || rect.left >= bounds.right) return null
     return { rect: rect, bounds: bounds }
   }
@@ -479,18 +530,29 @@
   }
 
   /** Scroll/resize path: move the existing pins, don't rebuild them. */
-  function positionPins() {
+  function positionPins(anchors) {
     state.annotations.forEach(function (ann, index) {
       var pin = pinLayer.children[index]
       if (!pin) return
-      var anchor = pinAnchor(ann)
-      pin.hidden = !anchor
+      var anchor = anchors[index]
+      if (pin.hidden !== !anchor) pin.hidden = !anchor
       if (anchor) {
-        pin.style.left = anchor.x + 'px'
-        pin.style.top = anchor.y + 'px'
+        setStyle(pin, 'left', anchor.x + 'px')
+        setStyle(pin, 'top', anchor.y + 'px')
       }
     })
-    anchorCard()
+  }
+
+  function updatePositions() {
+    withMeasurements(function () {
+      // Read all geometry before changing any overlay styles or markup.
+      var anchors = state.annotations.map(pinAnchor)
+      var nextFrame = framePosition()
+      var nextCard = cardPosition()
+      positionPins(anchors)
+      renderFrame(nextFrame)
+      anchorCard(nextCard)
+    })
   }
 
   function renderPins() {
@@ -667,7 +729,7 @@
   function pick(event) {
     if (state.mode === 'writing') {
       event.preventDefault()
-      event.stopPropagation()
+      event.stopImmediatePropagation()
       closeCard()
       return
     }
@@ -678,7 +740,7 @@
       return
     }
     event.preventDefault()
-    event.stopPropagation()
+    event.stopImmediatePropagation()
     state.selected = el
     state.hover = null
     state.mode = 'writing'
@@ -689,13 +751,14 @@
     openCard({ id: 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), detail: detailOf(el), comment: '' }, el)
   }
 
+  var pointer = null
   function onMove(event) {
     if (state.mode !== 'picking') return
+    pointer = { x: event.clientX, y: event.clientY }
     var el = elementAt(event.clientX, event.clientY)
-    if (!el) return
     if (el === state.hover) return
     state.hover = el
-    renderFrame()
+    onViewportChange()
   }
 
   function setMode(mode) {
@@ -703,6 +766,7 @@
     if (mode !== 'writing') {
       state.selected = null
       state.hover = null
+      pointer = null
       closeCard()
     }
     render()
@@ -782,10 +846,31 @@
     }
   }, false)
 
-  capture.addEventListener('mousemove', onMove, true)
-  capture.addEventListener('click', pick, true)
-  capture.addEventListener('contextmenu', function (event) {
+  function isAppEvent(event) {
+    return state.mode !== 'idle' && !root.contains(event.target)
+  }
+  window.addEventListener('mousemove', onMove, { capture: true, passive: true })
+  window.addEventListener('click', function (event) {
+    if (isAppEvent(event)) pick(event)
+  }, true)
+  // Keep app press handlers, links, focus and text selection from firing while
+  // picking. Pointer defaults remain available for native touch scrolling.
+  ;['pointerdown', 'pointerup'].forEach(function (type) {
+    window.addEventListener(type, function (event) {
+      if (isAppEvent(event)) event.stopImmediatePropagation()
+    }, true)
+  })
+  ;['mousedown', 'mouseup', 'dblclick', 'auxclick'].forEach(function (type) {
+    window.addEventListener(type, function (event) {
+      if (!isAppEvent(event)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }, true)
+  })
+  window.addEventListener('contextmenu', function (event) {
+    if (!isAppEvent(event)) return
     event.preventDefault()
+    event.stopImmediatePropagation()
     setMode('idle')
   }, true)
   window.addEventListener('click', function (event) {
@@ -818,18 +903,11 @@
 
   // Capture phase: scroll events from inner containers do not bubble, but they
   // are delivered to window listeners registered for capture.
-  var frameQueued = false
+  var viewportChanged = false
   function onViewportChange() {
-    if (frameQueued) return
-    frameQueued = true
-    requestAnimationFrame(function () {
-      frameQueued = false
-      renderFrame()
-      positionPins()
-    })
+    viewportChanged = true
   }
-  window.addEventListener('scroll', onViewportChange, true)
-  document.addEventListener('scroll', onViewportChange, true)
+  window.addEventListener('scroll', onViewportChange, { capture: true, passive: true })
   window.addEventListener('resize', function () {
     resyncAnchors()
     renderFrame()
@@ -861,31 +939,13 @@
   window.addEventListener('popstate', changePage)
   window.addEventListener('hashchange', changePage)
 
-  // Picking captures clicks, but wheel scrolling must still reach the real
-  // nested scroller under the pointer rather than the fixed overlay surface.
-  capture.addEventListener('wheel', function (event) {
-    var node = elementAt(event.clientX, event.clientY)
-    var scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1
-    var dy = event.deltaY * scale, dx = event.deltaX * scale
-    while (node && node !== document.documentElement) {
-      var style = getComputedStyle(node)
-      var canY = /(auto|scroll)/.test(style.overflowY) && (dy < 0 ? node.scrollTop > 0 : node.scrollTop + node.clientHeight < node.scrollHeight)
-      var canX = /(auto|scroll)/.test(style.overflowX) && (dx < 0 ? node.scrollLeft > 0 : node.scrollLeft + node.clientWidth < node.scrollWidth)
-      if ((dy && canY) || (dx && canX)) {
-        node.scrollBy(dx, dy); event.preventDefault(); return
-      }
-      node = node.parentElement
-    }
-    window.scrollBy(dx, dy)
-    event.preventDefault()
-  }, { passive: false })
-
   // Layout/transform animations do not necessarily emit scroll or resize.
-  // Keep only the live markers in sync; never rebuild DOM or write storage in
-  // this loop. Browsers pause rAF while the preview is in the background.
+  // Use one geometry pass for scrolling and animation; unchanged markup and
+  // styles are left alone. Browsers pause rAF while the preview is backgrounded.
   function trackAnchors() {
-    if (state.annotations.length || card) positionPins()
-    if (card) anchorCard()
+    if (viewportChanged && state.mode === 'picking' && pointer) state.hover = elementAt(pointer.x, pointer.y)
+    if (viewportChanged || state.hover || state.selected || state.annotations.length || card) updatePositions()
+    viewportChanged = false
     requestAnimationFrame(trackAnchors)
   }
   requestAnimationFrame(trackAnchors)

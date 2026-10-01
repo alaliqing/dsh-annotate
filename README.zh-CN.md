@@ -27,21 +27,33 @@
 把下面这段话交给能访问 Harness 所在电脑的编程助手：
 
 ```text
-阅读 https://github.com/alaliqing/dsh-annotate，按说明将最新已发布版本安装到本机 DeepSeek Harness 当前使用的 profile（桌面端为 desktop，浏览器为 web）。保留已有配置，不要中断当前 Harness 会话。验证安装结果，并说明如何重启 Harness、打开「标注」面板。
+阅读 https://github.com/alaliqing/dsh-annotate，按说明将最新已发布版本安装到本机 DeepSeek Harness 当前使用的 profile。桌面端用 Desktop 自带的 CLI 管理 desktop profile，浏览器用网页端 CLI。保留已有配置，不要中断正在进行的对话；安装前说明必要的 Desktop 初始化或彻底退出步骤。验证安装结果，并说明如何重启 Harness、打开「标注」面板。
 ```
 
-也可以手动安装，需要 Node.js 20+、`dsh` CLI 和 `PATH` 中可用的 pnpm：
+桌面端请先打开 Desktop 一次，完成 profile 初始化，然后彻底退出应用再安装。
+必须使用 **Desktop 自带的 CLI**；独立的 npm CLI 不能管理保留的 `desktop` profile。
+
+macOS 上，应用安装在 `/Applications` 时可直接执行：
 
 ```sh
-# 桌面端
-dsh plugin --profile desktop add dsh-annotate@latest
-# 浏览器
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@latest
+```
+
+如安装位置不同，请相应调整路径。内置 CLI 使用 Desktop 自带的 Node.js 和 pnpm。
+如果已通过 Desktop 将其 `dsh` 命令加入 `PATH`，也可使用简写
+`dsh plugin --profile desktop add dsh-annotate@latest`。
+
+浏览器端需要 Node.js 20+、网页端 CLI 和 `PATH` 中可用的 pnpm：
+
+```sh
 dsh plugin --profile web add dsh-annotate@latest
 ```
 
-已安装 `0.1.3` 或更新版本时，执行同一命令升级，然后彻底退出并重新打开
-Desktop，或重启 web profile 并刷新浏览器。Desktop 需要 `0.1.5` 或更新版本；
-如果 `PATH` 中没有 `dsh`，可使用 Desktop 应用自带的 CLI。
+如果使用了自定义网页端 profile，请将 `web` 替换为实际名称。
+已安装 `0.1.3` 或更新版本时，同一命令即可升级，也适用于此前链接到本地源码的安装。
+
+安装或升级后，**彻底退出并重新打开 Desktop**，或重启 web profile 并刷新浏览器；
+只刷新预览不会重新加载插件。Desktop 预览支持需要 `dsh-annotate` `0.1.5` 或更新版本。
 
 全新安装时，`0.1.3` 及后续版本自带 bundle 补丁，`dsh plugin add` 会自动登记
 并启用插件。`0.1.2` 及更早版本曾在 `$DSH_HOME/profiles/web/cordis.patch.yml`
@@ -52,22 +64,24 @@ Desktop，或重启 web profile 并刷新浏览器。Desktop 需要 `0.1.5` 或�
     - name: dsh-annotate
 ```
 
-以下旧版升级命令中的 `web`，应替换为你实际使用的 profile，例如 `desktop`。
+以下旧版升级示例适用于网页端；如果使用自定义网页端 profile，请将 `web` 替换为实际名称。
+Desktop 由应用管理，不支持 CLI 的 `--dump-config` 命令。
 
 升级已有的 `0.1.2` 或更早版本时，先移除再添加包，让 DSH 登记新的 bundle；
 只更新原有依赖可能不会将它加入 profile 的 bundle 列表：
 
 ```sh
 dsh plugin --profile web remove dsh-annotate
-dsh plugin --profile web add dsh-annotate
+dsh plugin --profile web add dsh-annotate@latest
 ```
 
 只从 `cordis.patch.yml` 移除旧的手动插入行，保留其他 profile 配置。如果没有
 其他补丁条目，文件内容应为 `[]`，不能只留注释。用
 `dsh --profile web --dump-config` 确认恰好有一个 `- id: dsh-annotate` 条目。
 重启 web profile、刷新浏览器后，点击**标注**或按 `⌘/Ctrl⇧B`。
-如果使用 `npx @deepseek-ai/dsh web`，把上述命令中的 `dsh` 换成
-`npx @deepseek-ai/dsh`。已测试版本和限制见[兼容性记录](docs/compatibility.md)。
+如果通过 `npx @deepseek-ai/dsh web` 启动浏览器端，安装时使用
+`npx @deepseek-ai/dsh plugin --profile web add dsh-annotate@latest`。
+已测试版本和限制见[兼容性记录](docs/compatibility.md)。
 
 ## 核心能力
 
@@ -82,7 +96,8 @@ dsh plugin --profile web add dsh-annotate
 - **彼此隔离的预览：** 保留应用路由、资源、fetch 和 WebSocket，同时不与 Harness 共用源。
 - **中英双语界面**，可在工具栏切换。
 
-插件不会截图，也不会修改应用样式。默认只发现你已经运行的服务器；只有显式配置了
+插件不会截图。标注状态会添加临时十字光标和覆盖层，页面及内部容器仍使用原生滚动。
+默认只发现你已经运行的服务器；只有显式配置了
 启动命令，才会启用进程控制。
 
 ## 使用
@@ -155,7 +170,8 @@ Shadow DOM 内部、跨源子 frame 和 Canvas 内部对象，可能需要正常
       staticFiles: false
 ```
 
-`0.1.3` 及后续版本可将此覆盖配置写入 web profile 的 `cordis.patch.yml`；
+`0.1.3` 及后续版本可将此覆盖配置写入当前 profile 的 `cordis.patch.yml`
+（`$DSH_HOME/profiles/<profile>/cordis.patch.yml`，`DSH_HOME` 默认为 `~/.dsh`）；
 插件条目由 bundle 自己提供。
 `detect.staticPorts: false` 会停止盲扫常见端口，只保留真实监听；`detect.staticFiles:
 false` 不再列出工作区里的静态页面；`detect.extraPorts` 用于补充习惯使用的端口。

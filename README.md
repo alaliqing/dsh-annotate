@@ -28,22 +28,36 @@ whole review to your conversation as structured text.
 Give a coding agent this prompt:
 
 ```text
-Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the active local DeepSeek Harness profile (desktop for the Desktop app, web for the browser). Preserve existing configuration and do not stop the current Harness session. Verify the installation, then explain how to restart Harness and open Annotate.
+Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the active local DeepSeek Harness profile. Use Desktop's bundled CLI for its desktop profile, or the web CLI for the browser profile. Preserve existing configuration and do not stop an active conversation. Explain any required Desktop initialization or full quit before installing, verify the installation, then explain how to restart Harness and open Annotate.
 ```
 
-Or install manually with Node.js 20+, the `dsh` CLI, and pnpm on `PATH`:
+For Desktop, open the app once to initialize its profile, then fully quit it
+before installing. Use **Desktop's bundled CLI**; the standalone npm CLI cannot
+manage the reserved `desktop` profile.
+
+On macOS, with the app installed in `/Applications`:
 
 ```sh
-# Desktop app
-dsh plugin --profile desktop add dsh-annotate@latest
-# Browser
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@latest
+```
+
+Adjust the path if needed. The bundled CLI uses Desktop's Node.js and pnpm
+runtimes. If Desktop has installed its `dsh` command on `PATH`, the shorter
+`dsh plugin --profile desktop add dsh-annotate@latest` is equivalent.
+
+For the browser, use a web CLI with Node.js 20+ and pnpm on `PATH`:
+
+```sh
 dsh plugin --profile web add dsh-annotate@latest
 ```
 
-For an existing `0.1.3` or newer install, run the same command to upgrade, then
-fully quit and reopen Desktop, or restart the web profile and refresh the browser.
-Desktop requires `0.1.5` or newer. Use the CLI bundled with your Desktop app if
-`dsh` is not on `PATH`.
+Replace `web` with your actual profile name if you use a custom web profile.
+For an existing `0.1.3` or newer install, the same command upgrades the package,
+including an installation linked to a local checkout.
+
+After installing or upgrading, **fully quit and reopen Desktop**, or restart the
+web profile and refresh the browser; reloading the preview alone does not reload
+the plugin. Desktop preview support requires `dsh-annotate` `0.1.5` or newer.
 
 For a new install, version `0.1.3` and later declares its own bundle patch, so
 `dsh plugin add` registers and enables it automatically. Version `0.1.2` and
@@ -55,8 +69,9 @@ earlier used this manual entry in `$DSH_HOME/profiles/web/cordis.patch.yml`
     - name: dsh-annotate
 ```
 
-In the legacy upgrade commands below, replace `web` with `desktop` if that is
-the profile you use.
+The legacy upgrade example below is for web installations; replace `web` with
+your actual web profile name if needed. Desktop is managed by the app and does
+not support the CLI's `--dump-config` command.
 
 When upgrading an existing `0.1.2` or earlier installation, remove and add the
 package so DSH registers its new bundle; updating the existing dependency alone
@@ -64,7 +79,7 @@ may leave it out of the profile's bundle list:
 
 ```sh
 dsh plugin --profile web remove dsh-annotate
-dsh plugin --profile web add dsh-annotate
+dsh plugin --profile web add dsh-annotate@latest
 ```
 
 Remove only the old manual insertion from `cordis.patch.yml`; keep all other
@@ -72,8 +87,9 @@ profile entries. If no patch entries remain, use `[]` rather than a comments-onl
 file. Check that `dsh --profile web --dump-config` has exactly one
 `- id: dsh-annotate` row. Restart the web profile and refresh the browser, then
 click **Annotate** or press `⌘/Ctrl⇧B`.
-If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
-`npx @deepseek-ai/dsh`. See [compatibility](docs/compatibility.md) for tested
+If you run the browser with `npx @deepseek-ai/dsh web`, use
+`npx @deepseek-ai/dsh plugin --profile web add dsh-annotate@latest` to install.
+See [compatibility](docs/compatibility.md) for tested
 versions and limits.
 
 ## What it gives you
@@ -93,7 +109,8 @@ versions and limits.
   upgrades without sharing the Harness origin.
 - **English and Chinese UI**, switchable from the toolbar.
 
-No screenshot is captured and no app style is changed. By default, the plugin
+No screenshot is captured. Mark mode adds a temporary crosshair and overlay,
+while page and container scrolling stays native. By default, the plugin
 only discovers servers you already run; process control requires an explicitly
 configured command.
 
@@ -179,8 +196,9 @@ Chromium.
       staticFiles: false
 ```
 
-For `0.1.3` and later, put this override in the web profile's
-`cordis.patch.yml`; the bundle supplies the plugin row.
+For `0.1.3` and later, put this override in your active profile's
+`cordis.patch.yml` (`$DSH_HOME/profiles/<profile>/cordis.patch.yml`, with
+`DSH_HOME` defaulting to `~/.dsh`); the bundle supplies the plugin row.
 `detect.staticPorts: false` stops probing the common-port list and leaves only
 real listeners; `detect.staticFiles: false` stops offering the workspace's own
 HTML pages. `detect.extraPorts` adds ports people run on by habit.
