@@ -27,76 +27,37 @@
 把下面这段话交给能访问 Harness 所在电脑的编程助手：
 
 ```text
-阅读 https://github.com/alaliqing/dsh-annotate，按说明将最新已发布版本安装到本机 DeepSeek Harness 当前使用的 profile。桌面端用 Desktop 自带的 CLI 管理 desktop profile，浏览器用网页端 CLI。保留已有配置，不要中断正在进行的对话；安装前说明必要的 Desktop 初始化或彻底退出步骤。验证安装结果，并说明如何重启 Harness、打开「标注」面板。
+请按 https://github.com/alaliqing/dsh-annotate 的 README，将 dsh-annotate 安装到本机 Harness 当前使用的 profile。保留已有配置，不要中断当前任务。完成后告诉我安装版本，以及任务结束后如何重启。
 ```
 
-桌面端请先打开 Desktop 一次，完成 profile 初始化，然后彻底退出应用再安装。
-必须使用 **Desktop 自带的 CLI**；独立的 npm CLI 不能管理保留的 `desktop` profile。
+以下命令安装 `0.1.14`，升级已有安装也可使用。
 
-macOS 上，应用安装在 `/Applications` 时可直接执行：
+### Desktop（macOS）
+
+先打开 Desktop 一次，完成 profile 初始化。安装时可以保持 Desktop 打开。
+使用 Desktop 自带的 CLI；应用安装在 `/Applications` 时执行：
 
 ```sh
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@latest
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@0.1.14
 ```
 
-如安装位置不同，请相应调整路径。内置 CLI 使用 Desktop 自带的 Node.js 和 pnpm。
-如果已通过 Desktop 将其 `dsh` 命令加入 `PATH`，也可使用简写
-`dsh plugin --profile desktop add dsh-annotate@latest`。
+如安装位置不同，请调整应用路径。等当前任务结束后，**彻底退出并重新打开 Desktop**，
+再点击**标注**或按 `⌘/Ctrl⇧B`。
 
-浏览器端需要 Node.js 20+、网页端 CLI 和 `PATH` 中可用的 pnpm：
+### 网页端
+
+已有网页端 CLI、Node.js 20+ 和 pnpm 时执行：
 
 ```sh
-dsh plugin --profile web add dsh-annotate@latest
+dsh plugin --profile web add dsh-annotate@0.1.14
 ```
 
-如果使用了自定义网页端 profile，请将 `web` 替换为实际名称。
-已安装 `0.1.3` 或更新版本时，同一命令即可升级，也适用于此前链接到本地源码的安装。
+如使用自定义 profile，请将 `web` 换成实际名称。等当前任务结束后，
+重启该 profile、刷新浏览器，再打开**标注**。
 
-**安装刚发布的版本：** pnpm 11 默认要求版本发布满 24 小时，等待期间 `@latest`
-可能选到旧版本。可以等到等待期结束后再安装；如需立即安装，先核对要安装的确切
-版本，再将该版本追加到当前 profile 的
-`$DSH_HOME/profiles/<profile>/pnpm-workspace.yaml`
-（默认 `~/.dsh/profiles/<profile>/pnpm-workspace.yaml`）中的现有列表。本次版本为：
-
-```yaml
-minimumReleaseAgeExclude:
-  - dsh-annotate@0.1.13
-```
-
-保留其他设置和已有放行条目。随后使用上方对应的安装命令，将
-`dsh-annotate@latest` 换成 `dsh-annotate@0.1.13`，并核对安装后的
-`node_modules/dsh-annotate/package.json` 版本。等待期结束后可移除此次新增的条目。
-
-安装或升级后，**彻底退出并重新打开 Desktop**，或重启 web profile 并刷新浏览器；
-只刷新预览不会重新加载插件。Desktop 预览支持需要 `dsh-annotate` `0.1.5` 或更新版本。
-
-全新安装时，`0.1.3` 及后续版本自带 bundle 补丁，`dsh plugin add` 会自动登记
-并启用插件。`0.1.2` 及更早版本曾在 `$DSH_HOME/profiles/web/cordis.patch.yml`
-（默认 `~/.dsh/profiles/web/cordis.patch.yml`）中手动添加：
-
-```yaml
-- insert:
-    - name: dsh-annotate
-```
-
-以下旧版升级示例适用于网页端；如果使用自定义网页端 profile，请将 `web` 替换为实际名称。
-Desktop 由应用管理，不支持 CLI 的 `--dump-config` 命令。
-
-升级已有的 `0.1.2` 或更早版本时，先移除再添加包，让 DSH 登记新的 bundle；
-只更新原有依赖可能不会将它加入 profile 的 bundle 列表：
-
-```sh
-dsh plugin --profile web remove dsh-annotate
-dsh plugin --profile web add dsh-annotate@latest
-```
-
-只从 `cordis.patch.yml` 移除旧的手动插入行，保留其他 profile 配置。如果没有
-其他补丁条目，文件内容应为 `[]`，不能只留注释。用
-`dsh --profile web --dump-config` 确认恰好有一个 `- id: dsh-annotate` 条目。
-重启 web profile、刷新浏览器后，点击**标注**或按 `⌘/Ctrl⇧B`。
-如果通过 `npx @deepseek-ai/dsh web` 启动浏览器端，安装时使用
-`npx @deepseek-ai/dsh plugin --profile web add dsh-annotate@latest`。
-已测试版本和限制见[兼容性记录](docs/compatibility.md)。
+仅在安装失败、重启后没有面板，或升级 `0.1.2` 及更早版本时，
+查看[安装排障](docs/install-troubleshooting.zh-CN.md)。
+已测试版本见[兼容性记录](docs/compatibility.md)。
 
 ## 核心能力
 

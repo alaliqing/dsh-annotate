@@ -1,5 +1,46 @@
 # Harness compatibility
 
+## Installation documentation release: 2026-10-02
+
+`0.1.14` keeps the runtime files and bundle patch from `0.1.13`. The repository
+and npm READMEs now use the same compact installation path: an exact version,
+Desktop's bundled CLI, and a restart after the current task finishes.
+Permission errors, strict release-age checks, missing panels, and legacy
+upgrades are covered only in the linked installation troubleshooting pages.
+
+The candidate passed `npm run check`, the complete distribution, preview,
+reliability and native-scroll suites, and the isolated real-Harness packed
+acceptance check. That check installed one active bundle, loaded its panel and
+workspace preview, delivered an annotation to the local model fixture, and
+preserved an unrelated composer draft. These checks use macOS Apple Silicon,
+Desktop CLI `0.2.0-rc.2`, and Chromium `153.0.8010.12`.
+
+## Installation workflow audit: 2026-10-02
+
+The supplied macOS Desktop installation session replaced a source-linked
+`dsh-annotate` with registry version `0.1.13` while Desktop remained open.
+The installed runtime files and bundle patch matched the release checkout,
+bundle selection contained exactly one `dsh-annotate`, and the user's
+`cordis.patch.yml` was preserved.
+The session did not restart Desktop or verify the panel after restart; these
+checks establish installation on disk, not activation in that running window.
+
+A separate isolated, initialized Desktop profile installed the still-new
+`dsh-annotate@0.1.13` with bundled pnpm `11.7.0`, no external Node.js or pnpm on
+`PATH`, and no preconfigured release-age exclusion. Installation succeeded and
+pnpm automatically appended only `dsh-annotate@0.1.13` to
+`minimumReleaseAgeExclude`. This verifies the default exact-version path;
+profiles enforcing strict release-age checks may still require a reviewed
+version-specific exception or waiting for the configured period to end.
+
+The bundled CLI requires an initialized Desktop profile, but does not require
+Desktop to be stopped for this install. Review of the installed shell's quit
+path found no write-back of a cached profile manifest. Installation guidance
+therefore keeps Desktop open, waits for the current task to finish, and then
+asks the user to fully quit and reopen it to load the new package. The
+[upstream plugin-manager reference](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/boot/plugin-manager/README.md#known-limitations-and-deferred-work)
+also documents that package replacements require a process restart.
+
 ## Native scrolling and installation: 2026-10-01
 
 `0.1.11` retains the browser's native wheel path in marking mode. Chromium
