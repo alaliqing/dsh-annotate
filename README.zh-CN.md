@@ -60,11 +60,11 @@ dsh plugin --profile web add dsh-annotate@latest
 
 ```yaml
 minimumReleaseAgeExclude:
-  - dsh-annotate@0.1.12
+  - dsh-annotate@0.1.13
 ```
 
 保留其他设置和已有放行条目。随后使用上方对应的安装命令，将
-`dsh-annotate@latest` 换成 `dsh-annotate@0.1.12`，并核对安装后的
+`dsh-annotate@latest` 换成 `dsh-annotate@0.1.13`，并核对安装后的
 `node_modules/dsh-annotate/package.json` 版本。等待期结束后可移除此次新增的条目。
 
 安装或升级后，**彻底退出并重新打开 Desktop**，或重启 web profile 并刷新浏览器；

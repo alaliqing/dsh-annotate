@@ -23,7 +23,28 @@ document.addEventListener('wheel',event=>wheelEvents.push({prevented:event.defau
 </script></head><body><h1>Native annotation scrolling</h1>${nesting}<div id="horizontal"><div>Horizontal scroll</div></div><div style="height:3000px"></div>
 <script>for(const type of ['pointerdown','mousedown','click'])document.querySelector('#pick').addEventListener(type,()=>pressEvents.push(type));</script>
 <script src="/overlay.js"></script></body></html>`
+let earlyResponse
 const server = http.createServer((req, res) => {
+  if (req.url === '/early') {
+    earlyResponse = res
+    res.setHeader('content-type', 'text/html; charset=utf-8')
+    res.write(`<!doctype html><html><head><script>
+window.__DSH_ANNO__={parentOrigin:location.origin,lang:'en'};
+window.earlyReady=[];
+window.addEventListener('message',event=>{
+  if(event.data?.source==='dsh-annotate-overlay'&&event.data.type==='ready')earlyReady.push(!!document.querySelector('.dsa-layer')&&!!document.querySelector('#late-target'));
+  if(event.data?.source==='dsh-annotate-panel'&&event.data.type==='restore')fetch('/release-body');
+});
+</script><script src="/overlay.js"></script><script>
+for(const data of [{type:'set-mode',mode:'picking'},{type:'lang',lang:'zh'},{type:'restore',annotations:[],draft:{id:'early-draft',comment:'Keep this draft after reload',detail:{tag:'button',classes:[],selector:'#late-target'}}}])window.postMessage({source:'dsh-annotate-panel',...data},location.origin);
+</script>`)
+    return
+  }
+  if (req.url === '/release-body') {
+    res.end('ok')
+    earlyResponse.end('</head><body><button id="late-target">Late target</button></body></html>')
+    return
+  }
   res.setHeader('content-type', req.url === '/overlay.js' ? 'text/javascript' : 'text/html; charset=utf-8')
   res.end(req.url === '/overlay.js' ? overlay : html)
 })
@@ -36,6 +57,15 @@ try {
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } })
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
+  await page.goto(`http://127.0.0.1:${server.address().port}/early`)
+  await page.waitForFunction(() => earlyReady.length > 0)
+  assert.deepEqual(await page.evaluate(() => earlyReady), [true])
+  assert.deepEqual(errors, [])
+  await page.locator('.dsa-card textarea').waitFor()
+  assert.equal(await page.locator('.dsa-card textarea').inputValue(), 'Keep this draft after reload')
+  assert.equal(await page.locator('.dsa-card [data-act="save"]').textContent(), '保存')
+  assert.equal(await page.locator('.dsa-capture').count(), 1)
+  pass('early panel messages wait for mounting; readiness and restored drafts remain valid before the body loads')
   await page.goto(`http://127.0.0.1:${server.address().port}`)
   await page.locator('.dsa-layer').waitFor({ state: 'attached' })
   const mode = async value => {

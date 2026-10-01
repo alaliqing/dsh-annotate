@@ -51,11 +51,11 @@ profile's `$DSH_HOME/profiles/<profile>/pnpm-workspace.yaml` (default
 
 ```yaml
 minimumReleaseAgeExclude:
-  - dsh-annotate@0.1.12
+  - dsh-annotate@0.1.13
 ```
 
 Keep existing settings and exclusions. Then use the appropriate install command
-above with `dsh-annotate@0.1.12` instead of `dsh-annotate@latest`, and check the
+above with `dsh-annotate@0.1.13` instead of `dsh-annotate@latest`, and check the
 installed `node_modules/dsh-annotate/package.json` version. Remove the added
 exception once the waiting period has passed.
 
