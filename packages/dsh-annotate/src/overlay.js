@@ -314,6 +314,8 @@
   // ------------------------------------------------------------------- render
 
   var root = document.createElement('div')
+  var mounted = false
+  var pendingHostMessages = []
   root.className = 'dsa-layer'
   var styleEl = document.createElement('style')
   var capture = document.createElement('div')
@@ -327,6 +329,7 @@
   var card = null
 
   function mount() {
+    if (mounted) return
     styleEl.textContent = css()
     root.appendChild(styleEl)
     root.appendChild(pinLayer)
@@ -338,7 +341,12 @@
       root.setAttribute('popover', 'manual')
       root.showPopover()
     }
+    mounted = true
     render()
+    post('ready', { annotations: state.annotations, path: location.pathname })
+    var pending = pendingHostMessages
+    pendingHostMessages = []
+    pending.forEach(handleHostMessage)
   }
 
   function mountCapture() {
@@ -383,6 +391,7 @@
   }
 
   function render() {
+    if (!mounted) return
     var dark = isDark()
     root.setAttribute('data-dark', dark ? '1' : '0')
     mountCapture()
@@ -774,6 +783,7 @@
   }
 
   function post(type, payload) {
+    if (type === 'ready' && !mounted) return
     var target = window.__DSH_ANNO__ && window.__DSH_ANNO__.parentOrigin
     if (!target) return
     try {
@@ -795,6 +805,13 @@
     if (event.source !== parent || event.origin !== (window.__DSH_ANNO__ && window.__DSH_ANNO__.parentOrigin)) return
     var data = event.data
     if (!data || data.source !== HOST) return
+    // Head-injected previews can receive mode and draft restoration before the
+    // body is parsed. Apply those messages only after the layer has its children.
+    if (!mounted) { pendingHostMessages.push(data); return }
+    handleHostMessage(data)
+  }, false)
+
+  function handleHostMessage(data) {
     if (data.type === 'busy') { state.busy = data.value; return }
     if (data.type === 'lang') { setLang(data.lang); return }
     if (data.type === 'restore') {
@@ -844,7 +861,7 @@
     } else if (data.type === 'ping') {
       post('ready', { annotations: state.annotations, path: location.pathname })
     }
-  }, false)
+  }
 
   function isAppEvent(event) {
     return state.mode !== 'idle' && !root.contains(event.target)
@@ -952,5 +969,4 @@
   state.annotations = load()
   if (document.body) mount()
   else document.addEventListener('DOMContentLoaded', mount)
-  post('ready', { annotations: state.annotations, path: location.pathname })
 })()

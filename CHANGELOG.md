@@ -10,7 +10,20 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
-## [0.1.12] - 2026-10-01
+## [0.1.13] - 2026-10-01
+
+### Fixed
+
+- Wait for the injected overlay to mount before announcing readiness or applying
+  early panel messages. Reloading with a saved editor draft no longer races
+  against layer initialization. Add a streamed-document regression that sends
+  mode, language and draft restoration before the body loads.
+
+### Changed
+
+- Include the installation documentation from the unpublished 0.1.12 candidate.
+
+## [0.1.12] - 2026-10-01 (not published)
 
 ### Changed
 
@@ -208,7 +221,8 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
-[0.1.12]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.12
+[0.1.13]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.13
+[0.1.12]: https://github.com/alaliqing/dsh-annotate/tree/v0.1.12
 [0.1.11]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.11
 [0.1.10]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.10
 [0.1.9]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.9

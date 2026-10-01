@@ -29,8 +29,11 @@ for `@latest`: its default minimum release age is 24 hours. An isolated Desktop
 install of exact version `0.1.11` passed with only `dsh-annotate@0.1.11` appended
 to `minimumReleaseAgeExclude`; the public npm CLI's web installation and
 `--dump-config` check also passed with that version-specific exception. The
-`0.1.12` documentation patch records this installation behavior and retains the
-same scrolling implementation.
+initial `0.1.12` documentation candidate was blocked before publishing by a
+reload initialization race in the browser regression. `0.1.13` retains the
+scrolling implementation and installation guidance, and defers readiness and
+early panel messages until the layer is mounted. A streamed-document regression
+exercises mode, language and draft restoration before the body loads.
 
 ## Desktop preview repair: 2026-09-30
 
