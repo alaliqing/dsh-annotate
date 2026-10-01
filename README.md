@@ -28,86 +28,37 @@ whole review to your conversation as structured text.
 Give a coding agent this prompt:
 
 ```text
-Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the active local DeepSeek Harness profile. Use Desktop's bundled CLI for its desktop profile, or the web CLI for the browser profile. Preserve existing configuration and do not stop an active conversation. Explain any required Desktop initialization or full quit before installing, verify the installation, then explain how to restart Harness and open Annotate.
+Read https://github.com/alaliqing/dsh-annotate and install dsh-annotate into the current local Harness profile following its README. Preserve existing configuration and keep the current task running. Report the installed version and explain how to restart after the task finishes.
 ```
 
-For Desktop, open the app once to initialize its profile, then fully quit it
-before installing. Use **Desktop's bundled CLI**; the standalone npm CLI cannot
-manage the reserved `desktop` profile.
+The commands below install `0.1.14` and can also upgrade an existing install.
 
-On macOS, with the app installed in `/Applications`:
+### Desktop (macOS)
+
+Open Desktop once to initialize its profile. It can stay open during installation.
+Use its bundled CLI; with the app installed in `/Applications`:
 
 ```sh
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@latest
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@0.1.14
 ```
 
-Adjust the path if needed. The bundled CLI uses Desktop's Node.js and pnpm
-runtimes. If Desktop has installed its `dsh` command on `PATH`, the shorter
-`dsh plugin --profile desktop add dsh-annotate@latest` is equivalent.
+Adjust the app path if needed. After the current task finishes, **fully quit and
+reopen Desktop**, then click **Annotate** or press `⌘/Ctrl⇧B`.
 
-For the browser, use a web CLI with Node.js 20+ and pnpm on `PATH`:
+### Web
+
+With the web CLI, Node.js 20+ and pnpm available, run:
 
 ```sh
-dsh plugin --profile web add dsh-annotate@latest
+dsh plugin --profile web add dsh-annotate@0.1.14
 ```
 
-Replace `web` with your actual profile name if you use a custom web profile.
-For an existing `0.1.3` or newer install, the same command upgrades the package,
-including an installation linked to a local checkout.
+Replace `web` with your profile name if needed. After the current task finishes,
+restart that profile and refresh the browser, then open **Annotate**.
 
-**Installing a newly published release:** pnpm 11 defaults to a 24-hour
-minimum release age, so `@latest` can select an older version during that window.
-Wait until the window expires, or, after checking the exact release you intend
-to install, append only that version to `minimumReleaseAgeExclude` in the active
-profile's `$DSH_HOME/profiles/<profile>/pnpm-workspace.yaml` (default
-`~/.dsh/profiles/<profile>/pnpm-workspace.yaml`). For this release:
-
-```yaml
-minimumReleaseAgeExclude:
-  - dsh-annotate@0.1.13
-```
-
-Keep existing settings and exclusions. Then use the appropriate install command
-above with `dsh-annotate@0.1.13` instead of `dsh-annotate@latest`, and check the
-installed `node_modules/dsh-annotate/package.json` version. Remove the added
-exception once the waiting period has passed.
-
-After installing or upgrading, **fully quit and reopen Desktop**, or restart the
-web profile and refresh the browser; reloading the preview alone does not reload
-the plugin. Desktop preview support requires `dsh-annotate` `0.1.5` or newer.
-
-For a new install, version `0.1.3` and later declares its own bundle patch, so
-`dsh plugin add` registers and enables it automatically. Version `0.1.2` and
-earlier used this manual entry in `$DSH_HOME/profiles/web/cordis.patch.yml`
-(default `~/.dsh/profiles/web/cordis.patch.yml`):
-
-```yaml
-- insert:
-    - name: dsh-annotate
-```
-
-The legacy upgrade example below is for web installations; replace `web` with
-your actual web profile name if needed. Desktop is managed by the app and does
-not support the CLI's `--dump-config` command.
-
-When upgrading an existing `0.1.2` or earlier installation, remove and add the
-package so DSH registers its new bundle; updating the existing dependency alone
-may leave it out of the profile's bundle list:
-
-```sh
-dsh plugin --profile web remove dsh-annotate
-dsh plugin --profile web add dsh-annotate@latest
-```
-
-Remove only the old manual insertion from `cordis.patch.yml`; keep all other
-profile entries. If no patch entries remain, use `[]` rather than a comments-only
-file. Check that `dsh --profile web --dump-config` has exactly one
-`- id: dsh-annotate` row. Restart the web profile and refresh the browser, then
-click **Annotate** or press `⌘/Ctrl⇧B`.
-If you run the browser with `npx @deepseek-ai/dsh web`, use
-`npx @deepseek-ai/dsh plugin --profile web add dsh-annotate@latest` to install.
-See [compatibility](docs/compatibility.md) for tested
-versions and limits.
+If installation fails, the panel is missing after restart, or you are upgrading
+`0.1.2` or earlier, see [installation troubleshooting](docs/install-troubleshooting.md).
+See [compatibility](docs/compatibility.md) for tested versions.
 
 ## What it gives you
 
