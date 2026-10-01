@@ -15,22 +15,39 @@ annotation payload, configuration and the documented limits, see the
 Give a coding agent this prompt:
 
 ```text
-Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the active local DeepSeek Harness profile (desktop for the Desktop app, web for the browser). Preserve existing configuration and do not stop the current Harness session. Verify the installation, then explain how to restart Harness and open Annotate.
+Read https://github.com/alaliqing/dsh-annotate and install its latest published version into the active local DeepSeek Harness profile. Use Desktop's bundled CLI for its desktop profile, or the web CLI for the browser profile. Preserve existing configuration and do not stop an active conversation. Explain any required Desktop initialization or full quit before installing, verify the installation, then explain how to restart Harness and open Annotate.
 ```
 
-Or install manually with Node.js 20+, the `dsh` CLI, and pnpm on `PATH`:
+For Desktop, open the app once to initialize its profile, then fully quit it
+before installing. Use **Desktop's bundled CLI**; the standalone npm CLI cannot
+manage the reserved `desktop` profile.
+
+On macOS, with the app installed in `/Applications`:
 
 ```sh
-# Desktop app
-dsh plugin --profile desktop add dsh-annotate@latest
-# Browser
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@latest
+```
+
+Adjust the path if needed. The bundled CLI uses Desktop's Node.js and pnpm
+runtimes. If Desktop has installed its `dsh` command on `PATH`, the shorter
+`dsh plugin --profile desktop add dsh-annotate@latest` is equivalent.
+
+For the browser, use a web CLI with Node.js 20+ and pnpm on `PATH`:
+
+```sh
 dsh plugin --profile web add dsh-annotate@latest
 ```
 
-For an existing `0.1.3` or newer install, run the same command to upgrade, then
-fully quit and reopen Desktop, or restart the web profile and refresh the browser.
-Desktop requires `0.1.5` or newer. Use the bundled Desktop CLI if `dsh` is not on
-`PATH`. In legacy upgrade commands below, use your actual profile in place of `web`.
+Replace `web` with your actual profile name if you use a custom web profile.
+For an existing `0.1.3` or newer install, the same command upgrades the package,
+including an installation linked to a local checkout.
+
+After installing or upgrading, **fully quit and reopen Desktop**, or restart the
+web profile and refresh the browser; reloading the preview alone does not reload
+the plugin. Desktop preview support requires `dsh-annotate` `0.1.5` or newer.
+The legacy upgrade example below is for web installations; replace `web` with
+your actual web profile name if needed. Desktop is managed by the app and does
+not support the CLI's `--dump-config` command.
 
 For a new install, version `0.1.3` and later registers and enables its own
 bundle. Version `0.1.2` and earlier used this manual entry in
@@ -48,7 +65,7 @@ may leave it out of the profile's bundle list:
 
 ```sh
 dsh plugin --profile web remove dsh-annotate
-dsh plugin --profile web add dsh-annotate
+dsh plugin --profile web add dsh-annotate@latest
 ```
 
 Remove only the old manual insertion from `cordis.patch.yml` and keep all other
@@ -56,8 +73,9 @@ profile entries. If no patch entries remain, use `[]` rather than a comments-onl
 file. Check for exactly one `- id: dsh-annotate` row with
 `dsh --profile web --dump-config`. Restart the web profile and refresh the
 browser, then click **Annotate** or press `⌘/Ctrl⇧B`.
-If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
-`npx @deepseek-ai/dsh`. The package ships built files; no build step is needed.
+If you run the browser with `npx @deepseek-ai/dsh web`, use
+`npx @deepseek-ai/dsh plugin --profile web add dsh-annotate@latest` to install.
+The package ships built files; no build step is needed.
 
 ## What you get
 
@@ -68,6 +86,8 @@ If you use `npx @deepseek-ai/dsh web`, replace `dsh` above with
 - Click an element to write a note. Markers follow the element through window and
   nested scrolling, resizing and layout shifts, and hide when the element is
   clipped or gone.
+- Mark mode keeps native vertical and horizontal scrolling, including container
+  scroll chaining and overscroll containment.
 - **Send annotations** sends the review alone; **Add to composer** merges it into
   your draft. A rejected send keeps the annotations, and your draft and
   attachments are never sent by accident.

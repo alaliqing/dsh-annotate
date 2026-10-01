@@ -10,6 +10,24 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-10-01
+
+### Fixed
+
+- Keep native wheel scrolling while marking elements. Continuous input no longer
+  loses scroll distance on pages using `scroll-behavior: smooth`; horizontal
+  scrolling, container boundaries and overscroll containment follow the browser.
+- Share clipping and element measurements within one animation frame, read
+  geometry before updating the overlay, and leave unchanged marker styles and
+  readouts alone. Markers still follow layout and transform changes.
+
+### Changed
+
+- Clarify installation and upgrades in the repository's English/Chinese README
+  and npm package README, including Desktop initialization and its bundled CLI,
+  custom web profile names, local-link upgrades and the required Harness restart.
+- Add native scroll and marker-workload regression checks to CI and publication.
+
 ## [0.1.10] - 2026-09-30
 
 ### Fixed
@@ -180,6 +198,7 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.11]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.11
 [0.1.10]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.10
 [0.1.9]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.9
 [0.1.8]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.8

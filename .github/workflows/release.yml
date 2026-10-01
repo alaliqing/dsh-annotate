@@ -53,6 +53,7 @@ jobs:
       - run: npm run test:preview
       - run: npx playwright install --with-deps chromium
       - run: npm run test:reliability
+      - run: npm run test:scroll
       - name: is this version already published?
         id: annotate
         working-directory: packages/dsh-annotate

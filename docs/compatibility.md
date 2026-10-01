@@ -1,5 +1,28 @@
 # Harness compatibility
 
+## Native scrolling and installation: 2026-10-01
+
+`0.1.11` retains the browser's native wheel path in marking mode. Chromium
+regressions cover continuous vertical and horizontal input on smooth-scrolling
+pages, container boundaries and overscroll containment, app-click isolation,
+explicit exits, 50 stationary markers, and geometry changes without scrolling.
+The source-linked repair also passed macOS Desktop user acceptance for scrolling
+while marking.
+
+The packed `0.1.11` candidate passed the isolated real-Harness web check with
+Desktop CLI `0.2.0-rc.2` and Chromium `153.0.8010.12`: bundle activation, workspace
+preview, annotation acceptance, delivery to the local model fixture, and
+preservation of an unrelated composer draft.
+
+Desktop installation was separately checked in an isolated, initialized
+`desktop` profile using the bundled CLI with no external Node.js or pnpm on
+`PATH`. Installation selected exactly one annotation bundle. The CLI refuses
+an uninitialized Desktop profile and does not allow `--dump-config` for Desktop;
+open the app once to initialize it, and use the bundled CLI for installation.
+The [upstream architecture documentation](https://deepseek-harness.github.io/deepseek-harness/en/reference/)
+also distinguishes the app-managed Desktop profile from profiles managed by the
+public npm CLI. These checks do not extend native acceptance to Windows or Linux.
+
 ## Desktop preview repair: 2026-09-30
 
 `0.1.4` and earlier did not authenticate preview frames loaded by the actual

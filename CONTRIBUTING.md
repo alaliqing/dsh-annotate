@@ -55,6 +55,7 @@ those files directly, so an install needs no build step.
 | `packages/dsh-app-bridge/lib/index.js` | Standalone fixed-mount reverse proxy |
 | `scripts/dev.mjs` | One-command local harness development loop |
 | `tests/reliability.mjs` | The assertion-based browser suite (the acceptance gate) |
+| `tests/scroll.mjs` | Native wheel scrolling, picking isolation, and marker geometry budgets |
 | `tests/preview.mjs` | Real HTTP tests for redirects, static identity, preview leases and resource cleanup |
 | `tests/harness.mjs` | Optional packed-install check against the real Harness, with a local model fixture |
 | `tests/distribution.mjs` | Asserts the published tarball contains every runtime file |
