@@ -10,6 +10,16 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-10-01
+
+### Changed
+
+- Document pnpm 11's default 24-hour release-age wait, which can make `@latest`
+  install an older version immediately after publication. Explain waiting or
+  using an inspected exact version with a temporary, version-specific exception.
+- Keep the npm package's installation instructions aligned with both repository
+  READMEs. This documentation patch includes the scrolling repair from 0.1.11.
+
 ## [0.1.11] - 2026-10-01
 
 ### Fixed
@@ -198,6 +208,7 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.12]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.12
 [0.1.11]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.11
 [0.1.10]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.10
 [0.1.9]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.9

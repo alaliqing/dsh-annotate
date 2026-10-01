@@ -42,6 +42,23 @@ Replace `web` with your actual profile name if you use a custom web profile.
 For an existing `0.1.3` or newer install, the same command upgrades the package,
 including an installation linked to a local checkout.
 
+**Installing a newly published release:** pnpm 11 defaults to a 24-hour
+minimum release age, so `@latest` can select an older version during that window.
+Wait until the window expires, or, after checking the exact release you intend
+to install, append only that version to `minimumReleaseAgeExclude` in the active
+profile's `$DSH_HOME/profiles/<profile>/pnpm-workspace.yaml` (default
+`~/.dsh/profiles/<profile>/pnpm-workspace.yaml`). For this release:
+
+```yaml
+minimumReleaseAgeExclude:
+  - dsh-annotate@0.1.12
+```
+
+Keep existing settings and exclusions. Then use the appropriate install command
+above with `dsh-annotate@0.1.12` instead of `dsh-annotate@latest`, and check the
+installed `node_modules/dsh-annotate/package.json` version. Remove the added
+exception once the waiting period has passed.
+
 After installing or upgrading, **fully quit and reopen Desktop**, or restart the
 web profile and refresh the browser; reloading the preview alone does not reload
 the plugin. Desktop preview support requires `dsh-annotate` `0.1.5` or newer.
