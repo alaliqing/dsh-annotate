@@ -52,6 +52,21 @@ dsh plugin --profile web add dsh-annotate@latest
 如果使用了自定义网页端 profile，请将 `web` 替换为实际名称。
 已安装 `0.1.3` 或更新版本时，同一命令即可升级，也适用于此前链接到本地源码的安装。
 
+**安装刚发布的版本：** pnpm 11 默认要求版本发布满 24 小时，等待期间 `@latest`
+可能选到旧版本。可以等到等待期结束后再安装；如需立即安装，先核对要安装的确切
+版本，再将该版本追加到当前 profile 的
+`$DSH_HOME/profiles/<profile>/pnpm-workspace.yaml`
+（默认 `~/.dsh/profiles/<profile>/pnpm-workspace.yaml`）中的现有列表。本次版本为：
+
+```yaml
+minimumReleaseAgeExclude:
+  - dsh-annotate@0.1.12
+```
+
+保留其他设置和已有放行条目。随后使用上方对应的安装命令，将
+`dsh-annotate@latest` 换成 `dsh-annotate@0.1.12`，并核对安装后的
+`node_modules/dsh-annotate/package.json` 版本。等待期结束后可移除此次新增的条目。
+
 安装或升级后，**彻底退出并重新打开 Desktop**，或重启 web profile 并刷新浏览器；
 只刷新预览不会重新加载插件。Desktop 预览支持需要 `dsh-annotate` `0.1.5` 或更新版本。
 

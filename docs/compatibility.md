@@ -23,6 +23,15 @@ The [upstream architecture documentation](https://deepseek-harness.github.io/dee
 also distinguishes the app-managed Desktop profile from profiles managed by the
 public npm CLI. These checks do not extend native acceptance to Windows or Linux.
 
+After publication, npm metadata and all ten tarball files for `0.1.11` were
+verified against the tested checkout. pnpm `11.7.0` initially selected `0.1.10`
+for `@latest`: its default minimum release age is 24 hours. An isolated Desktop
+install of exact version `0.1.11` passed with only `dsh-annotate@0.1.11` appended
+to `minimumReleaseAgeExclude`; the public npm CLI's web installation and
+`--dump-config` check also passed with that version-specific exception. The
+`0.1.12` documentation patch records this installation behavior and retains the
+same scrolling implementation.
+
 ## Desktop preview repair: 2026-09-30
 
 `0.1.4` and earlier did not authenticate preview frames loaded by the actual
