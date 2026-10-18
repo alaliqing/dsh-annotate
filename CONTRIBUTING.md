@@ -59,6 +59,7 @@ those files directly, so an install needs no build step.
 | `tests/preview.mjs` | Real HTTP tests for redirects, static identity, preview leases and resource cleanup |
 | `tests/harness.mjs` | Optional packed-install check against the real Harness, with a local model fixture |
 | `tests/distribution.mjs` | Asserts the published tarball contains every runtime file |
+| `tests/payload.mjs` | Bilingual compact payloads and uncertain-target fallback |
 | `examples/demo-app/` | Zero-dependency fixture app used by the dev loop |
 
 ## Style

@@ -20,13 +20,13 @@
 如果 Desktop 已将它的 `dsh` 命令加入 `PATH`，也可执行：
 
 ```sh
-dsh plugin --profile desktop add dsh-annotate@0.1.14
+dsh plugin --profile desktop add dsh-annotate@0.1.15
 ```
 
 如果通过 `npx @deepseek-ai/dsh web` 启动网页端，使用：
 
 ```sh
-npx @deepseek-ai/dsh plugin --profile web add dsh-annotate@0.1.14
+npx @deepseek-ai/dsh plugin --profile web add dsh-annotate@0.1.15
 ```
 
 ## pnpm 拒绝刚发布的版本
@@ -42,7 +42,7 @@ README 使用确切版本，是因为 pnpm 11 默认的 24 小时版本等待期
 
 ```yaml
 minimumReleaseAgeExclude:
-  - dsh-annotate@0.1.14
+  - dsh-annotate@0.1.15
 ```
 
 保留其他设置和已有放行条目。等待期结束后，可移除此版本的例外。
@@ -76,7 +76,7 @@ minimumReleaseAgeExclude:
 
 ```sh
 dsh plugin --profile web remove dsh-annotate
-dsh plugin --profile web add dsh-annotate@0.1.14
+dsh plugin --profile web add dsh-annotate@0.1.15
 ```
 
 只从 `cordis.patch.yml` 删除旧的手动插入行，保留其他条目。

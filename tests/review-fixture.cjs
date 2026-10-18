@@ -6,7 +6,7 @@ const subscribers = new Set()
 let workspaces = []
 let workspaceSnapshot = { items: workspaces }
 const workspaceSubscribers = new Set()
-window.reviewTest = { fail: false, delay: 0, calls: [], sid: 'review-a' }
+window.reviewTest = { fail: false, delay: 0, calls: [], slots: [], guides: [], sid: 'review-a' }
 const actions = { setDraft(value) { input = { draft: value }; subscribers.forEach(fn => fn()) } }
 const useInput = (selector) => React.useSyncExternalStore(fn => { subscribers.add(fn); return () => subscribers.delete(fn) }, () => selector(input))
 // The panel discovers its workspace from this snapshot, so a test can point it
@@ -17,8 +17,8 @@ const ctx = {
   effect: fn => fn(),
   get(name) {
     return {
-      slots: { inject: (key, fn) => fn(), register: (options, component) => { slots.set(options.id, component) } },
-      sidebarRightTabs: { register() {} }, sidebarRight: { openTab() {} },
+      slots: { inject: (key, fn) => fn(), register: (options, component) => { slots.set(options.id, component); window.reviewTest.slots.push({name:options.name,id:options.id}) } },
+      sidebarRightTabs: { register(options) { window.reviewTest.guides.push(options) } }, sidebarRight: { openTab() {} },
       sessions: {
         scope: sid => ({ sid }),
         sessionOf: scope => ({
