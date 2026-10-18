@@ -22,13 +22,13 @@ Node.js and pnpm.
 If Desktop installed its `dsh` command on `PATH`, this is equivalent:
 
 ```sh
-dsh plugin --profile desktop add dsh-annotate@0.1.14
+dsh plugin --profile desktop add dsh-annotate@0.1.15
 ```
 
 For a browser started with `npx @deepseek-ai/dsh web`, use:
 
 ```sh
-npx @deepseek-ai/dsh plugin --profile web add dsh-annotate@0.1.14
+npx @deepseek-ai/dsh plugin --profile web add dsh-annotate@0.1.15
 ```
 
 ## pnpm refuses a newly published version
@@ -46,7 +46,7 @@ to the existing list in the active profile's
 
 ```yaml
 minimumReleaseAgeExclude:
-  - dsh-annotate@0.1.14
+  - dsh-annotate@0.1.15
 ```
 
 Keep all other settings and exclusions. Remove this version's exception once
@@ -84,7 +84,7 @@ your web profile name if needed:
 
 ```sh
 dsh plugin --profile web remove dsh-annotate
-dsh plugin --profile web add dsh-annotate@0.1.14
+dsh plugin --profile web add dsh-annotate@0.1.15
 ```
 
 Remove only the old manual insertion from `cordis.patch.yml`, preserving other

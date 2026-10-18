@@ -20,7 +20,8 @@ const CHANNEL_OUT = 'dsh-annotate-panel'
 const PAGE_CHANNEL = 'dsh-annotate-page'
 const KIND = 'annotate'
 const TAB_ID = 'dsh-annotate'
-const MARKER = '#f0a05a'
+const THEME = dsaTheme()
+const MARKER = THEME.marker
 
 // The panel's language is a user preference, kept on the harness origin; the
 // injected overlay is told about a change over postMessage.
@@ -42,205 +43,147 @@ const hostMessage = (reply, fallbackKey) => {
 }
 
 const PANEL_CSS = `
-/* A column of the page, not a card over it: no radius, no shadow, no glass —
-   the sidebar owns the surface, the tab owns its content insets. */
-.dsa-col { display:flex; flex-direction:column; height:100%; min-height:0; color:var(--dsw-alias-label-primary,#e8eaed);
-  font:12.5px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
-.dsa-bar { position:relative; z-index:3; display:flex; align-items:center; gap:5px; padding:8px 10px; flex:none;
-  border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent); }
-/* The primary action lives at the bottom, away from the top edge. */
-.dsa-foot { display:flex; align-items:center; gap:6px; padding:8px 10px; flex:none;
-  border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent);
-  background:color-mix(in srgb,var(--dsw-alias-bg-base,#0d1117) 16%,transparent) }
-.dsa-foot .dsa-count { margin-left:auto; padding-inline:6px }
-.dsa-helpwrap { position:relative; display:inline-flex }
-.dsa-help { position:absolute; right:0; top:31px; z-index:9; width:268px; padding:10px 12px;
-  border-radius:10px; border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 14%,transparent);
-  background:var(--dsw-alias-bg-layer-1,#1b1f26); box-shadow:0 12px 34px rgba(0,0,0,.3);
-  font-size:11.5px; line-height:1.6; color:var(--dsw-alias-label-secondary,#9aa0a6) }
-.dsa-help b { display:block; margin:7px 0 2px; font-size:10px; letter-spacing:.06em; text-transform:uppercase;
-  color:var(--dsw-alias-label-primary,#e8eaed) }
+.dsa-col { --dsa-ink:var(--dsw-alias-label-primary,${THEME.light.ink}); --dsa-muted:var(--dsw-alias-label-secondary,${THEME.light.muted});
+  --dsa-surface:var(--dsw-alias-bg-layer-1,${THEME.light.surface}); --dsa-base:var(--dsw-alias-bg-base,${THEME.light.field});
+  --dsa-line:color-mix(in srgb,var(--dsa-ink) 12%,transparent); --dsa-hover:color-mix(in srgb,var(--dsa-ink) 5%,transparent);
+  display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; position:relative; container-type:inline-size;
+  color:var(--dsa-ink); background:var(--dsa-base); font:13px/1.5 ${THEME.sans}; }
+.dsa-col { scrollbar-color:color-mix(in srgb,var(--dsa-ink) 25%,transparent) transparent; scrollbar-width:thin }
+.dsa-col * { scrollbar-color:inherit; scrollbar-width:thin }
+.dsa-col *, .dsa-col *::before, .dsa-col *::after { box-sizing:border-box }
+.dsa-col button { font:inherit; cursor:pointer; touch-action:manipulation }
+.dsa-col button:disabled { opacity:.35; cursor:default }
+.dsa-col button:focus-visible, .dsa-col select:focus-visible, .dsa-col input:focus-visible { outline:2px solid ${THEME.focus}; outline-offset:2px }
+.dsa-bar { position:relative; z-index:4; display:flex; align-items:center; gap:6px; min-height:${THEME.toolbarHeight}px; padding:7px 9px; flex:none;
+  background:var(--dsa-surface); border-bottom:1px solid var(--dsa-line) }
+.dsa-ico { display:inline-flex; align-items:center; justify-content:center; gap:5px; width:32px; height:32px; padding:0; flex:none;
+  border:0; border-radius:7px; background:transparent; color:var(--dsa-muted) }
+.dsa-ico svg { width:15px; height:15px; flex:none }
+.dsa-ico:hover:not(:disabled), .dsa-menu button:hover:not(:disabled), .dsa-mini:hover { background:var(--dsa-hover); color:var(--dsa-ink) }
+.dsa-ico[data-on="true"] { background:var(--dsa-hover); color:var(--dsa-ink) }
+.dsa-mark { width:auto; padding:0 8px; font-size:12px!important; white-space:nowrap }
+.dsa-address { flex:1; min-width:0; display:flex; align-items:center; height:32px; border:1px solid transparent; border-radius:8px;
+  background:color-mix(in srgb,var(--dsa-ink) 4%,var(--dsa-surface)); padding-left:9px }
+.dsa-address:focus-within { border-color:var(--dsa-line); background:var(--dsa-surface) }
+.dsa-url { width:100%; min-width:0; border:0; outline:none!important; background:transparent; color:var(--dsa-muted);
+  font:11px ${THEME.mono}; text-overflow:ellipsis; padding:0 }
+.dsa-url:focus { color:var(--dsa-ink) }
+.dsa-address .dsa-ico { width:30px; height:30px }
+.dsa-popover { position:absolute; z-index:8; max-width:calc(100% - 16px); padding:5px; border:1px solid var(--dsa-line); border-radius:12px;
+  color:var(--dsa-ink); background:var(--dsa-surface); box-shadow:0 8px 26px #0002; pointer-events:auto }
+.dsa-menu { top:43px; right:8px; width:220px; max-height:min(520px,calc(100vh - 80px)); overflow:auto }
+.dsa-menu button { display:flex; align-items:center; gap:8px; width:100%; padding:6px 9px; min-height:34px; border:0; border-radius:6px;
+  background:transparent; color:inherit; text-align:left; font-size:12px }
+.dsa-menu button svg { width:14px; height:14px; color:var(--dsa-muted) }
+.dsa-menu button .dsa-menu-value { margin-left:auto; color:var(--dsa-muted); font-size:11px }
+.dsa-menu-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 9px; min-height:38px; font-size:12px }
+.dsa-width { width:100px; min-width:0; height:30px; border:1px solid var(--dsa-line); border-radius:6px; color:inherit;
+  background:var(--dsa-surface); font:11px ${THEME.sans}; padding:0 5px }
+.dsa-menu-sep { border-top:1px solid var(--dsa-line); margin:5px 4px }
+.dsa-help { padding:8px 9px; font-size:11px; line-height:1.7; color:var(--dsa-muted) }
+.dsa-help b { display:block; margin:8px 0 3px; color:var(--dsa-ink); font-size:11px }
 .dsa-help b:first-child { margin-top:0 }
-.dsa-help p { margin:0 }
-.dsa-bar .dsa-url { flex:1; min-width:0; height:26px; padding:0 9px; border-radius:6px; outline:none;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:inherit;
-  background:color-mix(in srgb,var(--dsw-alias-bg-base,#0d1117) 38%,transparent);
-  border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 12%,transparent); }
-.dsa-bar .dsa-url:focus { border-color:${MARKER}; }
-.dsa-ico { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; padding:0; flex:none;
-  border:1px solid transparent; border-radius:6px; background:transparent; color:var(--dsw-alias-label-secondary,#9aa0a6); cursor:pointer; }
-.dsa-ico:hover:not(:disabled) { background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 8%,transparent); color:var(--dsw-alias-label-primary,#e8eaed); }
-.dsa-ico:disabled { opacity:.35; cursor:default }
-.dsa-ico[data-on="true"] { color:${MARKER}; border-color:color-mix(in srgb,${MARKER} 45%,transparent); background:color-mix(in srgb,${MARKER} 12%,transparent); }
-.dsa-ico svg { width:15px; height:15px }
-/* Text button: the language switch is its own label, so no icon sizing. */
-.dsa-lang { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; letter-spacing:.02em }
-.dsa-send { height:26px; padding:0 10px; border-radius:6px; cursor:pointer; white-space:nowrap; font-size:11.5px; flex:none;
-  background:${MARKER}; border:1px solid transparent; color:#20160c; font-weight:600; }
-.dsa-send:hover { opacity:.9 }
-.dsa-send:disabled { opacity:.42; cursor:default }
-.dsa-count { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; color:var(--dsw-alias-label-secondary,#9aa0a6); padding-inline:2px }
-
-.dsa-notice { flex:none; display:flex; align-items:center; gap:8px; padding:7px 11px; font-size:11.5px; line-height:1.5; color:${MARKER};
-  background:color-mix(in srgb,${MARKER} 12%,transparent); border-bottom:1px solid color-mix(in srgb,${MARKER} 30%,transparent); }
-.dsa-notice button { all:unset; cursor:pointer; margin-left:auto; color:inherit; opacity:.7; flex:none }
-.dsa-notice button:hover { opacity:1 }
-
-/* ---- list face ---- */
-.dsa-listwrap { flex:1; min-height:0; overflow:auto }
-.dsa-sechead { display:flex; align-items:center; gap:8px; padding:11px 11px 6px;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
-  color:var(--dsw-alias-label-secondary,#9aa0a6) }
-.dsa-sechead .dsa-ico { margin-left:auto; width:22px; height:22px }
-.dsa-svc { display:flex; align-items:center; gap:10px; width:100%; padding:9px 11px; text-align:left; cursor:pointer;
-  background:transparent; border:0; border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 5%,transparent);
-  color:inherit; font:inherit }
-.dsa-svc:hover { background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 4%,transparent) }
-.dsa-svc .dot { width:7px; height:7px; border-radius:50%; flex:none; background:#4bbf7a; box-shadow:0 0 0 3px color-mix(in srgb,#4bbf7a 20%,transparent) }
-.dsa-svc .copy { flex:1; min-width:0 }
-.dsa-svc .copy b { display:block; font-size:12.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-.dsa-svc .copy span { display:block; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px;
-  color:var(--dsw-alias-label-secondary,#9aa0a6); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-.dsa-svc .go { flex:none; font-size:11px; color:${MARKER}; opacity:0 }
-.dsa-svc:hover .go { opacity:1 }
-/* A tag names what the row is: the workspace's own service, or a declared port. */
-.dsa-tag { display:inline-block; margin-left:6px; padding:1px 5px; border-radius:6px; vertical-align:1px;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
-  color:var(--dsw-alias-label-secondary,#9aa0a6); background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 8%,transparent) }
-.dsa-tag.is-project { color:${MARKER}; background:color-mix(in srgb,${MARKER} 16%,transparent) }
-.dsa-svc.is-project .dot { background:${MARKER}; box-shadow:0 0 0 3px color-mix(in srgb,${MARKER} 20%,transparent) }
-/* A static page is not a running service, so its dot reads as a file. */
-.dsa-file .dot { background:#8a93a5; box-shadow:0 0 0 3px color-mix(in srgb,#8a93a5 20%,transparent) }
-.dsa-sechead.is-sub { padding-top:14px }
-
-.dsa-openrow { display:flex; gap:6px; align-items:center; padding:10px 11px;
-  border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent) }
-.dsa-openrow input { flex:1; min-width:0; height:28px; padding:0 9px; border-radius:6px; outline:none; color:inherit;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px;
-  background:color-mix(in srgb,var(--dsw-alias-bg-base,#0d1117) 38%,transparent);
-  border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 12%,transparent) }
-.dsa-openrow input:focus { border-color:${MARKER} }
-.dsa-openrow button { height:28px; padding:0 11px; border-radius:6px; cursor:pointer; font-size:11.5px; flex:none;
-  background:${MARKER}; border:0; color:#20160c; font-weight:600 }
-.dsa-hintbox { padding:12px 12px 16px; color:var(--dsw-alias-label-secondary,#9aa0a6); font-size:11.5px; line-height:1.6 }
-.dsa-hintbox p { margin:0 0 8px }
-.dsa-cmd { display:flex; align-items:center; gap:8px; padding:6px 8px; margin-bottom:5px; border-radius:6px;
-  background:color-mix(in srgb,var(--dsw-alias-bg-base,#0d1117) 40%,transparent);
-  border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 8%,transparent) }
-.dsa-cmd code { flex:1; min-width:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--dsw-alias-label-primary,#e8eaed) }
-.dsa-cmd button { all:unset; cursor:pointer; font-size:10.5px; color:${MARKER}; flex:none }
-
-.dsa-stage { position:relative; flex:1; min-height:0; background:#fff }
-.dsa-frame { width:100%; height:100%; border:0; display:block }
-.dsa-stagefoot { position:absolute; left:0; right:0; bottom:0; display:flex; gap:8px; align-items:center;
-  padding:3px 8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; letter-spacing:.04em;
-  color:rgba(255,255,255,.9); background:linear-gradient(0deg,rgba(0,0,0,.62),transparent); pointer-events:none }
-.dsa-stagefoot i { width:6px; height:6px; border-radius:50%; background:${MARKER}; box-shadow:0 0 0 3px color-mix(in srgb,${MARKER} 25%,transparent); flex:none }
-.dsa-stagefoot span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-
+.dsa-help p { margin:0 0 5px }
+.dsa-stage { position:relative; flex:1; min-height:0; overflow:hidden; background:var(--dsa-base) }
+.dsa-frame { width:100%; height:100%; border:0; display:block; background:white }
+.dsa-foot { position:absolute; z-index:5; left:50%; bottom:14px; transform:translateX(-50%); display:flex; align-items:center; gap:4px;
+  height:44px; max-width:calc(100% - 24px); padding:5px 6px 5px 10px; border:1px solid var(--dsa-line); border-radius:24px;
+  background:var(--dsa-surface); box-shadow:0 4px 18px #0002 }
+.dsa-review-toggle { display:flex; gap:7px; align-items:center; min-width:0; height:32px; padding:0 5px; border:0; border-radius:6px;
+  background:transparent; color:var(--dsa-muted); white-space:nowrap; font-size:12px!important }
+.dsa-review-toggle svg { width:14px; height:14px; flex:none }
+.dsa-review-toggle:hover { background:var(--dsa-hover); color:var(--dsa-ink) }
+.dsa-foot .dsa-ico { width:28px; height:30px }
+.dsa-divider { height:15px; border-left:1px solid var(--dsa-line); margin:0 3px }
+.dsa-send { display:inline-flex; align-items:center; justify-content:center; flex:none; min-height:32px; padding:0 12px;
+  border:0; border-radius:7px; background:var(--dsa-ink); color:var(--dsa-surface); font-size:12px!important }
+.dsa-foot .dsa-send { width:32px; height:32px; padding:0; border-radius:50% }
+.dsa-send svg { width:15px; height:15px }
+.dsa-send:hover:not(:disabled) { opacity:.85 }
+.dsa-busy { animation:dsa-pulse 1s ease-in-out infinite; font:700 16px ${THEME.mono} }
+@keyframes dsa-pulse { 50% { opacity:.4 } }
+.dsa-submit-menu { left:50%; bottom:66px; transform:translateX(-50%); top:auto; width:190px }
+.dsa-review-panel { left:50%; bottom:66px; transform:translateX(-50%); width:310px; max-height:min(360px,55%); overflow:auto }
+.dsa-item { display:flex; align-items:flex-start; gap:3px; border-bottom:1px solid var(--dsa-line) }
+.dsa-item:last-child { border-bottom:0 }
+.dsa-note-open { display:flex; align-items:flex-start; flex:1; min-width:0; gap:9px; padding:10px 7px; border:0; border-radius:7px;
+  color:inherit; background:transparent; text-align:left; font-size:12px!important; line-height:1.65!important }
+.dsa-note-open:hover { background:var(--dsa-hover) }
+.dsa-idx { flex:none; width:18px; height:18px; margin-top:1px; border-radius:50%; display:grid; place-items:center; background:color-mix(in srgb,${MARKER} 19%,var(--dsa-surface));
+  color:var(--dsa-ink); font:600 9px ${THEME.mono} }
+.dsa-body { min-width:0; flex:1; overflow-wrap:anywhere }
+.dsa-comment { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; white-space:pre-wrap }
+.dsa-note-target { display:block; margin-top:3px; color:var(--dsa-muted); font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.dsa-draft-label { display:block; color:var(--dsa-muted); font-size:10px; margin-top:3px }
+.dsa-mini { display:inline-flex; align-items:center; justify-content:center; width:28px; height:30px; margin:6px 2px 0 0; flex:none; padding:0;
+  color:var(--dsa-muted); border:0; border-radius:6px; background:transparent; opacity:.55 }
+.dsa-mini svg { width:13px; height:13px }
+.dsa-item:hover .dsa-mini, .dsa-item:focus-within .dsa-mini { opacity:1 }
+.dsa-mini[data-danger="true"]:hover { color:var(--dsw-alias-state-error-primary,#c25151) }
+.dsa-pick-hint { position:absolute; bottom:18px; left:14px; z-index:2; pointer-events:none; color:var(--dsa-muted); font-size:10px }
+.dsa-pick-hint[data-batch="true"] { bottom:68px; left:50%; transform:translateX(-50%); white-space:nowrap }
+.dsa-notice { display:flex; align-items:center; gap:8px; padding:9px 11px; color:var(--dsa-ink); background:var(--dsa-surface); font-size:12px; line-height:1.6 }
+.dsa-toast { position:absolute; left:50%; bottom:68px; transform:translateX(-50%); z-index:9; max-width:calc(100% - 24px); width:max-content;
+  border:1px solid var(--dsa-line); border-radius:10px; box-shadow:0 4px 18px #0002 }
+.dsa-toast[data-kind="error"] { border-color:color-mix(in srgb,#c25151 45%,var(--dsa-line)) }
+.dsa-notice button { display:inline-flex; align-items:center; justify-content:center; flex:none; min-width:28px; min-height:28px; border:0; border-radius:5px; padding:2px 5px; color:inherit; background:transparent; font-size:11px }
+.dsa-notice button:hover { background:var(--dsa-hover) }
+.dsa-notice .dsa-dismiss { margin-left:auto; color:var(--dsa-muted) }
 .dsa-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
-  padding:26px; text-align:center; color:var(--dsw-alias-label-secondary,#9aa0a6);
-  background:color-mix(in srgb,var(--dsw-alias-bg-base,#0d1117) 90%,transparent) }
-.dsa-empty h4 { margin:0; font-size:13px; color:var(--dsw-alias-label-primary,#e8eaed); font-weight:600 }
+  padding:24px; text-align:center; color:var(--dsa-muted); background:var(--dsa-base) }
+.dsa-empty h4 { margin:0; font-size:13px; color:var(--dsa-ink); font-weight:600 }
 .dsa-empty p { margin:0; max-width:330px; font-size:12px; line-height:1.65 }
-.dsa-empty code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; padding:2px 5px; border-radius:4px;
-  background:color-mix(in srgb,${MARKER} 14%,transparent); color:${MARKER} }
-
-/* Review management belongs to the panel chrome, never on top of the app. */
-.dsa-review-toggle { position:relative; width:30px; min-width:30px; padding:0 }
-.dsa-review-toggle .dsa-review-badge { position:absolute; top:-5px; right:-5px; min-width:15px; height:15px; padding:0 3px;
-  box-sizing:border-box; border-radius:8px; text-align:center; box-shadow:0 0 0 2px var(--dsw-alias-bg-layer-1,#181d25);
-  font:700 9px/15px ui-monospace,SFMono-Regular,Menlo,monospace; color:#20160c; background:${MARKER} }
-.dsa-review-panel { flex:none; max-height:min(42%,360px); overflow:auto;
-  border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 10%,transparent);
-  background:var(--dsw-alias-bg-layer-1,#1b1f26); box-shadow:0 8px 20px rgba(0,0,0,.12) }
-.dsa-review-panel .dsa-item:last-child { border-bottom:0 }
-.dsa-list { flex:none; max-height:40%; min-height:0; overflow:auto;
-  border-top:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 9%,transparent) }
-/* No annotations, no row: the hint lives behind the ? instead. */
-.dsa-list:empty { display:none; border-top:0 }
-.dsa-item { display:flex; gap:9px; padding:9px 11px; border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 5%,transparent) }
-.dsa-item:hover { background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 4%,transparent) }
-.dsa-idx { flex:none; width:19px; height:19px; margin-top:1px; border-radius:50%; background:${MARKER}; color:#20160c;
-  font:600 11px/19px ui-monospace,SFMono-Regular,Menlo,monospace; text-align:center }
-.dsa-body { flex:1; min-width:0 }
-.dsa-meta { display:flex; gap:7px; align-items:baseline; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-  font-size:10.5px; color:var(--dsw-alias-label-secondary,#9aa0a6) }
-.dsa-meta b { color:var(--dsw-alias-label-primary,#e8eaed); font-weight:600 }
-.dsa-sel { margin-top:1px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px;
-  color:color-mix(in srgb,var(--dsw-alias-label-secondary,#9aa0a6) 88%,transparent);
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-.dsa-comment { margin-top:3px; font-size:12.5px; line-height:1.6; word-break:break-word }
-.dsa-acts { display:flex; gap:4px; align-items:flex-start }
-.dsa-mini { width:22px; height:22px; border-radius:6px; border:1px solid transparent; background:transparent; cursor:pointer;
-  color:var(--dsw-alias-label-secondary,#9aa0a6) }
-.dsa-mini:hover { background:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 8%,transparent); color:var(--dsw-alias-label-primary,#e8eaed) }
-.dsa-mini[data-danger="true"]:hover { color:var(--dsw-alias-state-error-primary,#ff6b6b) }
-
-/* Conversation-header entry, next to the session utilities. */
-.dsa-open { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:28px; padding:0 9px;
-  border:1px solid transparent; border-radius:7px; background:transparent; cursor:pointer;
-  color:var(--dsw-alias-label-secondary,#9aa0a6); font-size:12px }
-.dsa-open:hover { background:var(--dsw-alias-bg-layer-1,rgba(128,128,128,.14)); color:var(--dsw-alias-label-primary,#e8eaed) }
-.dsa-open[data-count="true"] { color:${MARKER} }
-.dsa-open svg { width:15px; height:15px; flex:none }
-
-/* Pending-block chips above the composer. */
+.dsa-listwrap { flex:1; min-height:0; overflow:auto }
+.dsa-sechead { display:flex; align-items:center; gap:8px; padding:16px 14px 9px; font-size:12px; color:var(--dsa-muted) }
+.dsa-sechead .dsa-ico { margin-left:auto }
+.dsa-svc { display:flex; align-items:center; gap:10px; width:calc(100% - 20px); margin:0 10px 7px; padding:12px; border:1px solid var(--dsa-line); border-radius:9px;
+  background:var(--dsa-surface); color:inherit; text-align:left }
+.dsa-svc:hover { border-color:color-mix(in srgb,var(--dsa-ink) 25%,transparent) }
+.dsa-svc .dot { width:6px; height:6px; border-radius:50%; flex:none; background:#4b9c72 }
+.dsa-svc .copy { flex:1; min-width:0 }
+.dsa-svc .copy b { display:block; font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.dsa-svc .copy span { display:block; margin-top:3px; color:var(--dsa-muted); font:10.5px ${THEME.mono}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.dsa-svc .copy .dsa-tag { display:inline-block; margin:0 0 0 6px; font-family:inherit; font-size:9px; vertical-align:1px }
+.dsa-svc .go { flex:none; font-size:11px; color:var(--dsa-muted) }
+.dsa-tag { display:inline-block; margin-left:6px; padding:1px 5px; border-radius:5px; font-size:9px; vertical-align:1px; color:var(--dsa-muted); background:var(--dsa-hover) }
+.dsa-tag.is-project { color:var(--dsa-ink); background:color-mix(in srgb,${MARKER} 17%,transparent) }
+.dsa-file .dot { background:#9299a2 }
+.dsa-openrow { display:flex; align-items:center; gap:8px; padding:12px; border-top:1px solid var(--dsa-line) }
+.dsa-openrow input { min-width:0; flex:1; height:34px; padding:0 9px; border:1px solid var(--dsa-line); border-radius:7px; color:inherit; background:var(--dsa-surface); font:11px ${THEME.mono} }
+.dsa-openrow button { height:34px; padding:0 12px; border:0; border-radius:7px; background:var(--dsa-ink); color:var(--dsa-surface); font-size:12px }
+.dsa-hintbox { padding:14px; color:var(--dsa-muted); font-size:12px; line-height:1.75 }
+.dsa-hintbox p { margin:0 0 8px }
+.dsa-cmd { display:flex; align-items:center; gap:8px; padding:7px 9px; margin-bottom:5px; border:1px solid var(--dsa-line); border-radius:7px; background:var(--dsa-surface) }
+.dsa-cmd code { min-width:0; flex:1; overflow-wrap:anywhere; font:11px ${THEME.mono} }
+.dsa-cmd button { flex:none; border:0; background:transparent; color:inherit; font-size:11px }
 .dsa-dock { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:0 2px 6px }
-.dsa-chip { display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 4px 0 8px; border-radius:20px;
-  font-size:11.5px; color:var(--dsw-alias-label-primary,#e8eaed);
-  background:color-mix(in srgb,${MARKER} 16%,transparent); border:1px solid color-mix(in srgb,${MARKER} 42%,transparent) }
+.dsa-chip { display:inline-flex; align-items:center; gap:6px; min-height:26px; padding:0 4px 0 8px; border-radius:20px; font-size:11.5px;
+  color:var(--dsw-alias-label-primary,${THEME.light.ink}); background:color-mix(in srgb,${MARKER} 16%,transparent); border:1px solid color-mix(in srgb,${MARKER} 42%,transparent) }
 .dsa-chip .dot { width:6px; height:6px; border-radius:50%; background:${MARKER} }
-.dsa-chip button { all:unset; cursor:pointer; width:16px; height:16px; line-height:14px; text-align:center; border-radius:50%;
-  color:color-mix(in srgb,var(--dsw-alias-label-primary,#fff) 70%,transparent) }
-.dsa-chip button:hover { background:rgba(0,0,0,.22); color:#fff }
-.dsa-chip-clear { all:unset; cursor:pointer; font-size:11px; color:var(--dsw-alias-label-secondary,#9aa0a6); padding:0 4px }
-.dsa-chip-clear:hover { color:${MARKER} }
-/* Review-tool rhythm: clear hierarchy, quiet surfaces, consistent targets. */
-.dsa-global-notice { position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:2147483647;padding:12px 18px;border-radius:10px;background:#202833;color:#fff;box-shadow:0 4px 18px #0003;font:13px/1.5 system-ui;max-width:calc(100vw - 32px) }
-.dsa-col { container-type:inline-size; background:var(--dsw-alias-bg-base,#11151b); font-size:13px }
-.dsa-bar { padding:10px; gap:4px; background:var(--dsw-alias-bg-layer-1,#181d25) }
-.dsa-ico { width:30px; height:30px; border-radius:7px }
-.dsa-bar .dsa-url { height:32px; font-size:12px }
-.dsa-foot { padding:10px; gap:6px; min-height:53px; background:var(--dsw-alias-bg-layer-1,#181d25) }
-.dsa-foot > .dsa-ico:first-child { width:auto; padding:0 9px; gap:5px; font-size:12px; border-color:color-mix(in srgb,currentColor 18%,transparent) }
-.dsa-send, .dsa-secondary { min-height:32px; border-radius:7px; font-size:12px; padding:0 10px }
-.dsa-secondary { color:inherit; background:transparent; border:1px solid color-mix(in srgb,currentColor 20%,transparent); cursor:pointer; white-space:nowrap }
-.dsa-secondary:disabled { opacity:.4; cursor:default }
-.dsa-width { flex:0 0 82px; width:82px; height:30px; padding:0 22px 0 8px; box-sizing:border-box; font-size:11px;
-  background:transparent; color:inherit; border:1px solid color-mix(in srgb,currentColor 15%,transparent); border-radius:6px }
-.dsa-stage { overflow:hidden; background:var(--dsw-alias-bg-layer-1,#181d25) }
-.dsa-frame { background:white }
-.dsa-stagefoot { display:none }
-.dsa-col button:focus-visible, .dsa-col select:focus-visible { outline:2px solid ${MARKER}; outline-offset:2px }
-.dsa-sechead { font-size:12px; font-weight:600; line-height:1.5; letter-spacing:0; text-transform:none; padding:18px 14px 10px }
-.dsa-svc { width:calc(100% - 20px); margin:0 10px 7px; padding:12px; border:1px solid color-mix(in srgb,currentColor 10%,transparent); border-radius:10px }
-.dsa-svc:hover { border-color:color-mix(in srgb,${MARKER} 45%,transparent) }
-.dsa-svc .dot { box-shadow:none; width:6px; height:6px }
-.dsa-svc .copy span { margin-top:3px }
-.dsa-svc .go { opacity:.65 }
-.dsa-openrow { padding:12px; gap:8px }
-.dsa-openrow input, .dsa-openrow button { height:34px }
-.dsa-hintbox { padding:16px; line-height:1.8 }
-.dsa-help { width:min(290px,calc(100cqw - 24px)); line-height:1.75 }
-.dsa-mini { width:28px; height:28px }
-.dsa-meta b { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px }
-.dsa-notice { padding:9px 12px; font-size:12px; flex-wrap:wrap }
-.dsa-empty { gap:12px; background:var(--dsw-alias-bg-base,#11151b) }
-@container (max-width:380px) { .dsa-width { display:none } .dsa-foot { flex-wrap:wrap } .dsa-foot .dsa-count { margin-left:auto } .dsa-secondary { margin-left:auto } .dsa-bar { padding:8px 6px } }
+.dsa-chip button, .dsa-chip-clear { border:0; background:transparent; color:inherit; cursor:pointer; padding:3px 5px; border-radius:50%; font-size:11px }
+.dsa-global-notice { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:2147483647; padding:12px 18px; border-radius:10px;
+  background:#252525; color:#fff; box-shadow:0 4px 18px #0003; font:13px/1.5 ${THEME.sans}; max-width:calc(100vw - 32px) }
+@container (max-width:380px) { .dsa-bar { padding:7px 6px; gap:4px } .dsa-mark { width:32px; padding:0 } .dsa-mark span { display:none } .dsa-url { font-size:10px } .dsa-address { padding-left:7px } .dsa-mini { opacity:.7 } }
+@media (pointer:coarse) { .dsa-mini { opacity:1 } }
 @media (prefers-reduced-motion:reduce) { .dsa-col * { transition:none!important; animation:none!important } }
-
 `
 
 function injectStyles(text) {
   const el = document.createElement('style')
   el.setAttribute('data-dsh-annotate', '')
+  // Claim ownership before other lazy factories inventory untagged styles.
+  el.setAttribute('data-plugin', 'dsh-annotate')
+  el.setAttribute('data-plugin-css', 'dsh-annotate/panel.css')
   el.textContent = text
   document.head.appendChild(el)
   return () => el.remove()
 }
 
 const ICONS = {
+  send: 'M12 20V4m-6 6 6-6 6 6',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  attach: 'm9 14 7-7a3 3 0 0 1 4 4l-9 9a5 5 0 0 1-7-7l9-9M7 16l8-8',
+  annotation: 'M8 18H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5l-5 3v-3ZM7 8h10M7 12h6',
   marker: 'M3 17.2 14.4 5.8a2 2 0 0 1 2.8 0l1 1a2 2 0 0 1 0 2.8L6.8 21H3z',
   refresh: 'M13.6 4.2a6.8 6.8 0 1 0 6.4 8.5h-2a4.8 4.8 0 1 1-4.4-6.5V9l4-3.4z',
   back: 'M14.5 5 7.5 12l7 7',
@@ -257,47 +200,60 @@ const ICONS = {
 function Icon(props) {
   return React.createElement(
     'svg',
-    { viewBox: '0 0 24 24', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' },
-    React.createElement('path', { d: ICONS[props.name] })
+    { viewBox: '0 0 24 24', width: 20, height: 20, className: props.className, style: props.style, 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' },
+    props.name === 'more'
+      ? [5, 12, 19].map((cx) => React.createElement('circle', { key: cx, cx, cy: 12, r: 1.35, fill: 'currentColor', stroke: 'none' }))
+      : React.createElement('path', { d: ICONS[props.name] })
   )
 }
 
-const STYLE_KEYS = ['display', 'position', 'gap', 'padding', 'margin', 'font-size', 'font-weight', 'line-height',
-  'color', 'background-color', 'border-radius', 'box-shadow', 'width', 'height']
-
-function styleSummary(styles) {
-  return STYLE_KEYS.filter((key) => styles && styles[key]).map((key) => key + ':' + styles[key]).join('; ')
+function compactText(value, max = 64) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim()
+  return text.length > max ? text.slice(0, max - 1) + '…' : text
 }
 
-function payloadOf(ann, index) {
-  const lines = []
-  lines.push('#' + (index + 1) + ' ' + ann.tag + (ann.classes && ann.classes.length ? '.' + ann.classes[0] : '') +
-    (ann.component ? t('payload.component') + ann.component : ''))
-  const anchors = []
-  if (ann.role && ann.role !== ann.tag) anchors.push('role=' + ann.role)
-  if (ann.ariaLabel) anchors.push('aria-label="' + ann.ariaLabel + '"')
-  if (ann.alt) anchors.push('alt="' + ann.alt + '"')
-  if (ann.name) anchors.push('name=' + ann.name)
-  if (ann.testId) anchors.push(ann.testId)
-  if (anchors.length) lines.push(t('payload.semantics') + anchors.join(' · '))
-  if (ann.componentChain && ann.componentChain.length > 1) lines.push(t('payload.componentChain') + ann.componentChain.join(' > '))
-  lines.push(t('payload.selector') + ann.selector +
-    (typeof ann.selectorMatches === 'number' ? t('payload.selectorMatches', { count: ann.selectorMatches }) : ''))
-  lines.push(t('payload.geometry') + ann.rect.w + '×' + ann.rect.h + ' @ (' + ann.rect.x + ', ' + ann.rect.y + ')' +
-    (ann.placement ? t('payload.viewportZone', { zone: ann.placement.zone, x: ann.placement.x, y: ann.placement.y }) : ''))
-  const styles = styleSummary(ann.styles)
-  if (styles) lines.push(t('payload.styles') + styles)
-  if (ann.text) lines.push(t('payload.text') + ann.text)
-  lines.push(t('payload.comment') + ann.comment)
+function payloadOf(ann, index, viewport) {
+  // Keep the requested change intact. Technical context is a single locator
+  // line unless the captured selector needs disambiguation.
+  const comment = String(ann.comment || '').replace(/\n/g, '\n   ')
+  const lines = [(index + 1) + '. ' + comment]
+  const label = compactText(ann.ariaLabel || ann.alt || ann.text || ann.name || ann.component)
+  const selector = String(ann.selector || '')
+  const unique = !!selector && ann.selectorMatches === 1
+  let status = ''
+  if (!selector) status = t('payload.selectorMissing')
+  else if (ann.selectorMatches > 1) status = t('payload.selectorAmbiguous', { count: ann.selectorMatches })
+  else if (ann.selectorMatches === 0) status = t('payload.selectorNotFound')
+  else if (ann.selectorMatches === -1) status = t('payload.selectorInvalid')
+  else if (!unique) status = t('payload.selectorUnknown')
+  lines.push(t('payload.locator') + selector + status + (label ? ' · “' + label + '”' : ''))
+  if (!unique) {
+    const anchors = [ann.tag || 'element']
+    if (ann.role && ann.role !== ann.tag) anchors.push('role=' + ann.role)
+    if (ann.testId) anchors.push(ann.testId)
+    if (ann.name) anchors.push('name=' + JSON.stringify(compactText(ann.name)))
+    if (ann.component) anchors.push('component=' + compactText(ann.component))
+    const rect = ann.rect
+    if (rect && ['x', 'y', 'w', 'h'].every(key => Number.isFinite(rect[key]))) {
+      anchors.push(rect.w + '×' + rect.h + ' @ (' + rect.x + ', ' + rect.y + ')')
+    }
+    const size = ann.viewport || viewport
+    if (size?.w && size?.h) anchors.push(t('payload.viewport', { w: size.w, h: size.h }))
+    lines.push(t('payload.verify') + anchors.join(' · '))
+  }
   return lines.join('\n')
 }
 
 function payloadBlock(annotations, page, viewport) {
   if (!annotations.length) return ''
-  const head = t('payload.head', { page: page, w: viewport.w, h: viewport.h, count: annotations.length })
-  return head + '\n' + annotations.map((ann, i) => payloadOf(ann, i)).join('\n\n')
+  const head = t('payload.head', { page, count: annotations.length })
+  return head + '\n' + annotations.map((ann, i) => payloadOf(ann, i, viewport)).join('\n\n')
 }
 
+
+function annotationLabel(ann) {
+  return String(ann.ariaLabel || ann.text || ann.component || ann.tag || '').replace(/\s+/g, ' ').trim().slice(0, 70)
+}
 
 /** Accept what people actually type: `5173`, `:5173`, `localhost:3000/x`, a URL.
  *  A `file://` address passes through for a static page in the workspace; the
@@ -379,6 +335,9 @@ function apply(ctx) {
           page: '',
           mode: 'idle',
           helpOpen: false,
+          menuOpen: false,
+          sendMenuOpen: false,
+          draft: null,
           listOpen: false,
           sending: false,
           loading: false,
@@ -457,12 +416,12 @@ function apply(ctx) {
     }
   }
 
-  const flash = (panel, message) => {
+  const flash = (panel, message, options = {}) => {
     // A toast replaces any previous one, so the undo affordance it carried must
     // go with it.
-    panel.model.set({ notice: message, undoAvailable: false })
+    panel.model.set({ notice: message, noticeKind: options.kind || 'info', undoAvailable: !!options.undo, canRetrySend: !!options.retry })
     if (panel.noticeTimer) clearTimeout(panel.noticeTimer)
-    panel.noticeTimer = setTimeout(() => panel.model.set({ notice: null }), 6000)
+    if (!options.retry) panel.noticeTimer = setTimeout(() => panel.model.set({ notice: null }), 6000)
   }
 
   /** Open a page: harness-origin URLs load directly, everything else through the
@@ -507,6 +466,8 @@ function apply(ctx) {
       index: Math.min(history.length - 1, 39),
       mode: 'idle',
       annotations: readAnnotations(panel, url),
+      draft: readDraft(panel, url),
+      menuOpen: false, sendMenuOpen: false, listOpen: false,
       page: isFile ? '/' + decodeURIComponent(parsed.pathname.split('/').pop() || '') : parsed.pathname,
       notice: null,
     })
@@ -549,6 +510,9 @@ function apply(ctx) {
   const readAnnotations = (panel, url) => {
     try { const value = JSON.parse(localStorage.getItem(annotationKey(panel, url)) || '[]'); return Array.isArray(value) ? value : [] } catch { return [] }
   }
+  const readDraft = (panel, url) => {
+    try { return JSON.parse(localStorage.getItem(annotationKey(panel, url) + ':draft') || 'null') } catch { return null }
+  }
   const writeAnnotations = (panel, url, annotations) => {
     try { localStorage.setItem(annotationKey(panel, url), JSON.stringify(annotations)) }
     catch { flash(panel, t('notice.storageUnavailable')) }
@@ -560,12 +524,12 @@ function apply(ctx) {
     const isTraversal = expected !== undefined && current.history[expected] === url
     const history = isTraversal ? current.history : current.history.slice(0, current.index + 1).concat([url])
     panel.historyTarget = undefined
-    panel.model.set({ url, input: url, history: history.slice(-40), index: isTraversal ? expected : Math.min(history.length - 1, 39), annotations: readAnnotations(panel, url), mode: 'idle', listOpen: false })
+    panel.model.set({ url, input: url, history: history.slice(-40), index: isTraversal ? expected : Math.min(history.length - 1, 39), annotations: readAnnotations(panel, url), draft: readDraft(panel, url), mode: 'idle', listOpen: false, menuOpen: false, sendMenuOpen: false })
   }
   const sendAll = async (panel, setDraft, options) => {
     const state = panel.model.get()
     if (!state.annotations.length || state.sending) return false
-    if (state.mode === 'writing') { flash(panel, t('notice.finishEditing')); return false }
+    if (state.mode === 'writing' || (state.draft?.existing && state.annotations.some((ann) => ann.id === state.draft.id))) { flash(panel, t('notice.finishEditing')); return false }
     const submit = !options || options.submit !== false
     const block = payloadBlock(state.annotations, state.url, state.viewport)
     const ids = state.annotations.map((ann) => ann.id)
@@ -598,7 +562,7 @@ function apply(ctx) {
     const scope = sessions?.scope?.(panel.sid)
     const session = scope && sessions.sessionOf(scope)
     if (!session?.prompt) { flash(panel, t('notice.sendUnsupported')); return false }
-    panel.model.set({ sending: true })
+    panel.model.set({ sending: true, notice: null, canRetrySend: false })
     notify('busy', { value: true }, panel)
     let submission
     try {
@@ -610,7 +574,7 @@ function apply(ctx) {
       return true
     } catch (error) {
       submission?.abandon()
-      flash(panel, t('notice.sendFailed', { error: String(error.message || error) }))
+      flash(panel, t('notice.sendFailed', { error: String(error.message || error) }), { kind: 'error', retry: true })
       return false
     } finally { panel.model.set({ sending: false }); if (panel.frame) notify('busy', { value: false }, panel) }
   }
@@ -695,14 +659,14 @@ function apply(ctx) {
     React.useEffect(() => () => { if (activePanel === panel) activePanel = null }, [panel])
 
     React.useEffect(() => {
-      if (!state.helpOpen) return undefined
-      const close = () => panel.model.set({ helpOpen: false })
-      const timer = setTimeout(() => document.addEventListener('mousedown', close), 0)
-      return () => {
-        clearTimeout(timer)
-        document.removeEventListener('mousedown', close)
+      if (!state.menuOpen && !state.listOpen && !state.sendMenuOpen) return undefined
+      const close = (event) => {
+        if (event.target.closest?.('.dsa-popover, .dsa-popup-trigger')) return
+        panel.model.set({ menuOpen: false, helpOpen: false, listOpen: false, sendMenuOpen: false })
       }
-    }, [panel, state.helpOpen])
+      document.addEventListener('pointerdown', close)
+      return () => document.removeEventListener('pointerdown', close)
+    }, [panel, state.menuOpen, state.listOpen, state.sendMenuOpen])
 
     React.useEffect(() => {
       const onMessage = (event) => {
@@ -719,8 +683,8 @@ function apply(ctx) {
             const current = panel.model.get()
             const pageUrl = data.url || current.url
             if (data.type === 'ready') {
-              let draft = null
-              try { draft = JSON.parse(localStorage.getItem(annotationKey(panel, pageUrl) + ':draft') || 'null') } catch {}
+              const draft = readDraft(panel, pageUrl)
+              panel.model.set({ draft })
               notify('restore', { annotations: readAnnotations(panel, pageUrl), draft })
             }
             else writeAnnotations(panel, pageUrl, data.annotations || [])
@@ -737,7 +701,10 @@ function apply(ctx) {
               page: current.url ? current.page : data.path || current.page,
             })
           } else if (data.type === 'draft') {
+            panel.model.set({ draft: data.draft || null })
             try { localStorage.setItem(annotationKey(panel, data.url || panel.model.get().url) + ':draft', JSON.stringify(data.draft)) } catch { flash(panel, t('notice.draftUnavailable')) }
+          } else if (data.type === 'interact') {
+            panel.model.set({ menuOpen: false, sendMenuOpen: false, listOpen: false, helpOpen: false })
           } else if (data.type === 'warning' || data.type === 'missing') {
             flash(panel, data.message || t('notice.elementGone'))
           } else if (data.type === 'mode') {
@@ -777,7 +744,7 @@ function apply(ctx) {
     }
 
     const showList = () => {
-      panel.model.set({ view: 'list', src: '', previewOrigin: '', previewLease: '', mode: 'idle', notice: null, loading: false, error: null, listOpen: false, helpOpen: false })
+      panel.model.set({ view: 'list', src: '', previewOrigin: '', previewLease: '', mode: 'idle', notice: null, loading: false, error: null, listOpen: false, helpOpen: false, menuOpen: false, sendMenuOpen: false })
       panel.openRequest = (panel.openRequest || 0) + 1
       notify('set-mode', { mode: 'idle' })
       void runDetect(panel, { auto: false })
@@ -792,10 +759,11 @@ function apply(ctx) {
     const notice = state.notice
       ? React.createElement(
           'div',
-          { className: 'dsa-notice', role: 'status', 'aria-live': 'polite' },
+          { className: 'dsa-notice' + (state.view === 'page' ? ' dsa-toast' : ''), role: state.noticeKind === 'error' ? 'alert' : 'status', 'aria-live': 'polite', 'data-kind': state.noticeKind || 'info' },
           state.notice,
+          state.canRetrySend ? React.createElement('button', { type: 'button', disabled: state.sending, onClick: () => sendAll(panel, inputActions?.setDraft) }, t('page.retry')) : null,
           state.undoAvailable ? React.createElement('button', { type: 'button', onClick: () => { notify('undo'); panel.model.set({ undoAvailable: false, notice: null }) } }, t('notice.undo')) : null,
-          React.createElement('button', { type: 'button', title: t('notice.dismiss'), onClick: () => panel.model.set({ notice: null }) }, '✕')
+          React.createElement('button', { className: 'dsa-dismiss', type: 'button', title: t('notice.dismiss'), 'aria-label': t('notice.dismiss'), onClick: () => panel.model.set({ notice: null }) }, '✕')
         )
       : null
 
@@ -899,205 +867,87 @@ function apply(ctx) {
       )
     }
 
-    return React.createElement(
-      'div',
-      { className: 'dsa-col' },
-      notice,
-      React.createElement(
-        'div',
-        { className: 'dsa-bar' },
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: t('page.back'), disabled: state.index <= 0, onClick: () => go(-1) }, React.createElement(Icon, { name: 'back' })),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: t('page.forward'), disabled: state.index >= state.history.length - 1, onClick: () => go(1) }, React.createElement(Icon, { name: 'forward' })),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: t('page.reload'), onClick: reload }, React.createElement(Icon, { name: 'refresh' })),
-        React.createElement('input', {
-          className: 'dsa-url',
-          value: state.input,
-          spellCheck: false,
-          placeholder: t('page.addressPlaceholder'),
-          'aria-label': t('list.addressLabel'),
-          onChange: (event) => panel.model.set({ input: event.target.value }),
-          onKeyDown: (event) => {
-            if (event.key === 'Enter' && !event.nativeEvent?.isComposing) openUpstream(panel, event.target.value)
-          },
+    const h = React.createElement
+    const batchVisible = annotations.length > 0 || !!state.draft
+    const closeMenus = () => panel.model.set({ menuOpen: false, helpOpen: false, sendMenuOpen: false, listOpen: false })
+    const iconButton = (label, icon, onClick, props) => h('button', Object.assign({
+      className: 'dsa-ico', type: 'button', title: label, 'aria-label': label, onClick,
+    }, props), h(Icon, { name: icon }))
+    const openComment = (ann) => { closeMenus(); notify('view', { id: ann.id }) }
+    const resumeDraft = () => { closeMenus(); notify('resume-draft') }
+    const draftRow = state.draft ? h('div', { className: 'dsa-item dsa-draft', key: 'draft' },
+      h('button', { className: 'dsa-note-open', type: 'button', onClick: resumeDraft, title: t('page.resumeDraft') },
+        h('span', { className: 'dsa-idx', 'aria-hidden': true }, '✎'),
+        h('span', { className: 'dsa-body' }, h('span', { className: 'dsa-comment' }, state.draft.comment), h('span', { className: 'dsa-draft-label' }, t('page.draft')))),
+      iconButton(t('page.discardDraft'), 'trash', () => notify('discard-draft'), { className: 'dsa-mini', 'data-danger': 'true' })) : null
+
+    return h('div', { className: 'dsa-col' },
+      h('div', { className: 'dsa-bar' },
+        iconButton(t('page.backToList'), 'back', showList),
+        h('div', { className: 'dsa-address' },
+          h('input', {
+            className: 'dsa-url', value: state.input, spellCheck: false, placeholder: t('page.addressPlaceholder'), 'aria-label': t('list.addressLabel'),
+            onChange: (event) => panel.model.set({ input: event.target.value }),
+            onKeyDown: (event) => { if (event.key === 'Enter' && !event.nativeEvent?.isComposing) { closeMenus(); openUpstream(panel, event.target.value) } },
+          }), iconButton(t('page.reload'), 'refresh', () => { closeMenus(); reload() })),
+        h('button', {
+          className: 'dsa-ico dsa-mark', type: 'button', title: t('page.markTitle'), 'aria-label': t('page.markTitle'),
+          'aria-pressed': state.mode !== 'idle', 'data-on': state.mode !== 'idle' ? 'true' : 'false',
+          disabled: state.loading || !!state.error || state.sending, onClick: () => { closeMenus(); toggleMode() },
+        }, h(Icon, { name: 'marker' }), h('span', null, t('page.mark'))),
+        iconButton(t('page.more'), 'more', () => panel.model.set({ menuOpen: !state.menuOpen, listOpen: false, sendMenuOpen: false }), {
+          className: 'dsa-ico dsa-popup-trigger', 'aria-expanded': !!state.menuOpen, 'aria-controls': 'dsa-menu-' + sessionId,
         }),
-        React.createElement('select', { className: 'dsa-width', 'aria-label': t('page.widthLabel'), value: state.width, onChange: (event) => panel.model.set({ width: event.target.value }) },
-          React.createElement('option', { value: 'fit' }, t('page.widthFit')), React.createElement('option', { value: '390' }, t('page.widthMobile'))),
-        React.createElement(
-          'button',
-          {
-            className: 'dsa-ico dsa-review-toggle',
-            type: 'button',
-            'data-on': state.listOpen ? 'true' : 'false',
-            'aria-expanded': state.listOpen,
-            'aria-controls': 'dsa-review-panel-' + sessionId,
-            'aria-label': annotations.length ? t('page.listToggleLabel', { count: annotations.length }) : t('page.listToggleEmpty'),
-            disabled: !annotations.length,
-            title: annotations.length
-              ? state.listOpen ? t('page.listCollapse') : t('page.listExpand')
-              : t('page.listEmpty'),
-            onClick: () => panel.model.set({ listOpen: !state.listOpen, helpOpen: false }),
-          },
-          React.createElement(Icon, { name: 'review' }),
-          annotations.length ? React.createElement('span', { className: 'dsa-review-badge' }, annotations.length > 99 ? '99+' : String(annotations.length)) : null
-        ),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: t('page.backToList'), onClick: showList }, React.createElement(Icon, { name: 'list' })),
-        React.createElement(
-          'span',
-          { className: 'dsa-helpwrap' },
-          React.createElement(
-            'button',
-            {
-              className: 'dsa-ico',
-              type: 'button',
-              'data-on': state.helpOpen ? 'true' : 'false',
-              title: t('page.help'),
-              onClick: () => panel.model.set({ helpOpen: !state.helpOpen, listOpen: false }),
-            },
-            React.createElement(Icon, { name: 'help' })
-          ),
-          state.helpOpen
-            ? React.createElement(
-                'div',
-                { className: 'dsa-help' },
-                React.createElement('b', null, t('list.helpHeader')),
-                React.createElement('p', null, t('list.helpPicking')),
-                React.createElement('p', null, t('list.helpEscape')),
-                React.createElement('p', null, t('list.helpCmdClick')),
-                React.createElement('b', null, t('list.helpSendHeader')),
-                React.createElement('p', null, t('list.helpSendList')),
-                React.createElement('p', null, t('list.helpSendActions'))
-              )
-            : null
-        ),
-        React.createElement(
-          'button',
-          {
-            className: 'dsa-ico dsa-lang',
-            type: 'button',
-            title: t('panel.languageSwitch', { lang: i18n.nextLabel() }),
-            'aria-label': t('panel.languageSwitch', { lang: i18n.nextLabel() }),
-            onClick: () => switchLanguage(panel),
-          },
-          i18n.nextLabel()
-        )
-      ),
-      annotations.length && state.listOpen
-        ? React.createElement(
-            'div',
-            {
-              className: 'dsa-review-panel',
-              id: 'dsa-review-panel-' + sessionId,
-              role: 'region',
-              'aria-label': t('page.listAria'),
-            },
-            annotations.map((ann, index) =>
-              React.createElement(
-                'div',
-                { className: 'dsa-item', key: ann.id },
-                React.createElement('div', { className: 'dsa-idx' }, String(index + 1)),
-                React.createElement(
-                  'div',
-                  { className: 'dsa-body' },
-                  React.createElement(
-                    'div',
-                    { className: 'dsa-meta' },
-                    React.createElement('b', null, ann.tag + (ann.classes && ann.classes.length ? '.' + ann.classes[0] : '')),
-                    ann.component ? React.createElement('span', null, ann.component) : null,
-                    React.createElement('span', null, ann.rect.w + '×' + ann.rect.h)
-                  ),
-                  React.createElement('div', { className: 'dsa-sel' }, ann.selector),
-                  React.createElement('div', { className: 'dsa-comment' }, ann.comment)
-                ),
-                React.createElement(
-                  'div',
-                  { className: 'dsa-acts' },
-                  React.createElement('button', { className: 'dsa-mini', type: 'button', title: t('page.locate'), onClick: () => notify('focus', { id: ann.id }) }, React.createElement(Icon, { name: 'locate' })),
-                  React.createElement('button', { className: 'dsa-mini', type: 'button', 'data-danger': 'true', title: t('page.delete'), onClick: () => { notify('remove', { id: ann.id }); panel.model.set({ undoAvailable: true }); flash(panel, t('notice.deleted')) } }, React.createElement(Icon, { name: 'trash' }))
-                )
-              )
-            )
-          )
-        : null,
-      React.createElement(
-        'div',
-        { className: 'dsa-stage' },
-        state.src ? React.createElement('iframe', {
-          className: 'dsa-frame',
-          key: state.previewOrigin,
+        state.menuOpen ? h('div', { className: 'dsa-popover dsa-menu', id: 'dsa-menu-' + sessionId, role: 'region', 'aria-label': t('page.more') },
+          h('button', { type: 'button', title: t('page.back'), disabled: state.index <= 0, onClick: () => { closeMenus(); go(-1) } }, h(Icon, { name: 'back' }), t('page.back')),
+          h('button', { type: 'button', title: t('page.forward'), disabled: state.index >= state.history.length - 1, onClick: () => { closeMenus(); go(1) } }, h(Icon, { name: 'forward' }), t('page.forward')),
+          h('div', { className: 'dsa-menu-row' }, h('label', { htmlFor: 'dsa-width-' + sessionId }, t('page.widthLabel')),
+            h('select', { id: 'dsa-width-' + sessionId, className: 'dsa-width', value: state.width, onChange: (event) => panel.model.set({ width: event.target.value }) },
+              h('option', { value: 'fit' }, t('page.widthFit')), h('option', { value: '390' }, t('page.widthMobile')))),
+          h('button', { className: 'dsa-lang', type: 'button', title: t('panel.languageSwitch', { lang: i18n.nextLabel() }), 'aria-label': t('panel.languageSwitch', { lang: i18n.nextLabel() }), onClick: () => switchLanguage(panel) },
+            t('panel.language'), h('span', { className: 'dsa-menu-value' }, i18n.nextLabel())),
+          h('button', { type: 'button', onClick: () => { closeMenus(); window.open(state.url, '_blank', 'noopener') } }, h(Icon, { name: 'external' }), t('page.openExternal')),
+          h('div', { className: 'dsa-menu-sep' }),
+          h('button', { type: 'button', 'aria-expanded': state.helpOpen, onClick: () => panel.model.set({ helpOpen: !state.helpOpen }) }, h(Icon, { name: 'help' }), t('page.help')),
+          state.helpOpen ? h('div', { className: 'dsa-help' },
+            h('b', null, t('list.helpHeader')), h('p', null, t('list.helpPicking')), h('p', null, t('list.helpEscape')), h('p', null, t('list.helpCmdClick')),
+            h('b', null, t('list.helpSendHeader')), h('p', null, t('list.helpSendList')), h('p', null, t('list.helpSendActions'))) : null) : null),
+      h('div', { className: 'dsa-stage' },
+        state.src ? h('iframe', {
+          className: 'dsa-frame', key: state.previewOrigin,
           style: state.width === 'fit' ? undefined : { width: state.width + 'px', maxWidth: '100%', margin: '0 auto' },
-          src: state.src,
-          title: t('page.previewTitle'),
-          sandbox: 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals',
-          ref: (el) => {
-            frameRef = el
-            panel.frame = el
-          },
-          onLoad: () => { notify('ping'); notify('lang', { lang: i18n.lang }) },
+          src: state.src, title: t('page.previewTitle'), sandbox: 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals',
+          ref: (el) => { frameRef = el; panel.frame = el }, onLoad: () => { notify('ping'); notify('lang', { lang: i18n.lang }) },
         }) : null,
-        (state.error || state.loading)
-          ? React.createElement(
-              'div',
-              { className: 'dsa-empty' },
-              React.createElement('h4', null, state.error ? t('page.unavailable') : t('page.loading')),
-              React.createElement('p', null, state.error || t('page.loadingHint')),
-              state.error ? React.createElement('button', { className: 'dsa-send', type: 'button', onClick: () => openUpstream(panel, state.input) }, t('page.retry')) : null
-            )
-          : null,
-        React.createElement('div', { className: 'dsa-stagefoot' }, React.createElement('i'), React.createElement('span', null, state.url))
-      ),
-      React.createElement(
-        'div',
-        { className: 'dsa-foot' },
-        React.createElement(
-          'button',
-          {
-            className: 'dsa-ico',
-            type: 'button',
-            'data-on': state.mode === 'picking' ? 'true' : 'false',
-            title: t('page.markTitle'),
-            'aria-pressed': state.mode !== 'idle',
-            disabled: state.loading || !!state.error || state.sending,
-            onClick: toggleMode,
-          },
-          React.createElement(Icon, { name: 'marker' }), React.createElement('span', null, state.mode === 'idle' ? t('page.mark') : t('page.marking'))
-        ),
-        React.createElement('button', { className: 'dsa-ico', type: 'button', title: t('page.openExternal'), onClick: () => window.open(state.url, '_blank', 'noopener') }, React.createElement(Icon, { name: 'external' })),
-        React.createElement('span', { className: 'dsa-count' }, annotations.length ? t('page.unit', { count: annotations.length }) : ''),
-        React.createElement('button', { className: 'dsa-secondary', type: 'button', disabled: !annotations.length || state.sending, onClick: () => sendAll(panel, inputActions?.setDraft, { submit: false }) }, t('page.attach')),
-        React.createElement(
-          'button',
-          {
-            className: 'dsa-send',
-            type: 'button',
-            disabled: !annotations.length || state.sending,
-            title: t('page.sendHint'),
-            onClick: (event) => sendAll(panel, inputActions && inputActions.setDraft, { submit: !(event.altKey || event.metaKey) }),
-          },
-          state.sending ? t('page.sending') : t('page.send')
-        )
-      ),
-    )
+        state.error || state.loading ? h('div', { className: 'dsa-empty' },
+          h('h4', null, t(state.error ? 'page.unavailable' : 'page.loading')), h('p', null, state.error || t('page.loadingHint')),
+          state.error ? h('button', { className: 'dsa-send', type: 'button', onClick: () => openUpstream(panel, state.input) }, t('page.retry')) : null) : null,
+        state.mode === 'picking' ? h('div', { className: 'dsa-pick-hint', 'data-batch': batchVisible ? 'true' : 'false' }, t('page.pickHint')) : null,
+        batchVisible ? h('div', { className: 'dsa-foot', 'aria-label': t('page.batch') },
+          h('button', {
+            className: 'dsa-review-toggle dsa-popup-trigger', type: 'button', 'aria-expanded': state.listOpen,
+            'aria-controls': 'dsa-review-panel-' + sessionId, 'aria-label': annotations.length ? t('page.listToggleLabel', { count: annotations.length }) : t('page.resumeDraft'),
+            title: state.listOpen ? t('page.listCollapse') : t('page.listExpand'),
+            onClick: () => { if (!annotations.length && state.draft) resumeDraft(); else panel.model.set({ listOpen: !state.listOpen, sendMenuOpen: false, menuOpen: false }) },
+          }, h(Icon, { name: 'review' }), annotations.length ? t('page.batchCount', { count: annotations.length }) : t('page.draft')),
+          h('span', { className: 'dsa-divider', 'aria-hidden': true }),
+          iconButton(t('page.sendOptions'), 'more', () => panel.model.set({ sendMenuOpen: !state.sendMenuOpen, listOpen: false, menuOpen: false }), { className: 'dsa-ico dsa-popup-trigger', 'aria-expanded': !!state.sendMenuOpen, 'aria-controls': 'dsa-submit-menu-' + sessionId }),
+          h('button', { className: 'dsa-send', type: 'button', title: t('page.sendHint'), 'aria-label': t(state.sending ? 'page.sending' : 'page.send'), disabled: !annotations.length || state.sending,
+            onClick: (event) => { closeMenus(); sendAll(panel, inputActions?.setDraft, { submit: !(event.altKey || event.metaKey) }) },
+          }, state.sending ? h('span', { className: 'dsa-busy', 'aria-hidden': true }, '···') : h(Icon, { name: 'send' }))) : null,
+        state.listOpen && batchVisible ? h('div', {
+          className: 'dsa-popover dsa-review-panel', id: 'dsa-review-panel-' + sessionId, role: 'region', 'aria-label': t('page.listAria'),
+        }, draftRow, annotations.map((ann, index) => h('div', { className: 'dsa-item', key: ann.id },
+          h('button', { className: 'dsa-note-open', type: 'button', title: t('page.view'), onClick: () => openComment(ann) },
+            h('span', { className: 'dsa-idx', 'aria-hidden': true }, String(index + 1)), h('span', { className: 'dsa-body' },
+              h('span', { className: 'dsa-comment' }, ann.comment), h('span', { className: 'dsa-note-target' }, annotationLabel(ann)))),
+          iconButton(t('page.delete'), 'trash', () => { notify('remove', { id: ann.id }); flash(panel, t('notice.deleted'), { undo: true }) }, { className: 'dsa-mini', 'data-danger': 'true' })))) : null,
+        state.sendMenuOpen ? h('div', { className: 'dsa-popover dsa-menu dsa-submit-menu', id: 'dsa-submit-menu-' + sessionId, role: 'region', 'aria-label': t('page.sendOptions') },
+          h('button', { className: 'dsa-secondary', type: 'button', disabled: !annotations.length || state.sending, onClick: () => { closeMenus(); sendAll(panel, inputActions?.setDraft, { submit: false }) } }, h(Icon, { name: 'attach' }), t('page.attach'))) : null,
+        notice))
   }
 
     // ------------------------------------------------------- smaller entries
-
-  const HeaderButton = (props) => {
-    const panel = getPanel(props.sessionId)
-    useSub(panel.model)
-    const count = panel.model.get().annotations.length
-    return React.createElement(
-      'button',
-      {
-        className: 'dsa-open',
-        type: 'button',
-        'data-count': count > 0 ? 'true' : 'false',
-        title: t('panel.headerTitle'),
-        onClick: openAnnotate,
-      },
-      React.createElement(Icon, { name: 'marker' }),
-      React.createElement('span', null, count ? t('panel.headerLabelCount', { count: count }) : t('panel.headerLabel'))
-    )
-  }
 
   const Dock = (props) => {
     const panel = getPanel(props.sessionId)
@@ -1162,7 +1012,7 @@ function apply(ctx) {
             order: 40,
             title: () => t('panel.tabTitle'),
             description: () => t('panel.tabDescription'),
-            icon: (iconProps) => React.createElement(Icon, Object.assign({ name: 'marker' }, iconProps)),
+            icon: (iconProps) => React.createElement(Icon, Object.assign({ name: 'annotation' }, iconProps)),
           },
         ],
       })
@@ -1179,14 +1029,17 @@ function apply(ctx) {
     }
   }
   contribute('sidebar.right.pane.tab', TAB_ID, AnnotateTab, undefined, { key: TAB_ID })
-  contribute('conversation.session.header.utilities', 'annotate-open', HeaderButton, t('panel.tabTitle'))
   contribute('conversation.input.dock', 'annotate-dock', Dock)
 
   // ⌘⇧B mirrors Codex's in-app browser; ⌘⇧A stays as an alias.
   const onKeyDown = (event) => {
     if (event.key === 'Escape' && activePanel) {
-      if (activePanel.model.get().helpOpen) {
-        activePanel.model.set({ helpOpen: false })
+      const state = activePanel.model.get()
+      if (state.menuOpen || state.listOpen || state.sendMenuOpen) {
+        const surface = event.target.closest?.('.dsa-popover')
+        if (surface?.id) document.querySelector('[aria-controls=' + JSON.stringify(surface.id) + ']')?.focus()
+        event.preventDefault()
+        activePanel.model.set({ menuOpen: false, helpOpen: false, listOpen: false, sendMenuOpen: false })
         return
       }
       activePanel.model.set({ mode: 'idle' })

@@ -20,7 +20,9 @@
   var currentPage = location.pathname + location.search + location.hash
   var liveElements = new Map()
   var undo = null
-  var MARKER = '#f0a05a'
+  var THEME = dsaTheme()
+  var MARKER = THEME.marker
+  var undoDraft = null
 
   if (window.__dshAnnotateReady) return
   window.__dshAnnotateReady = true
@@ -35,6 +37,7 @@
     mode: 'idle', // 'idle' | 'picking' | 'writing'
     hover: null,
     selected: null,
+    savedDraft: null,
     drafting: null, // { id, selector, ... , comment }
     viewing: null, // id of the read-only comment currently open
     sendOnCommit: false, // ⌘/Ctrl-click submits the batch right away
@@ -61,11 +64,12 @@
 
   function css() {
     var dark = isDark()
-    var ink = dark ? '#f2f3f5' : '#16181d'
-    var muted = dark ? 'rgba(242,243,245,.62)' : 'rgba(22,24,29,.58)'
-    var panelBg = dark ? 'rgba(20,22,27,.86)' : 'rgba(252,252,253,.90)'
-    var hair = dark ? 'rgba(255,255,255,.16)' : 'rgba(16,18,22,.14)'
-    var fieldBg = dark ? 'rgba(255,255,255,.06)' : 'rgba(16,18,22,.04)'
+    var palette = dark ? THEME.dark : THEME.light
+    var ink = palette.ink
+    var muted = palette.muted
+    var panelBg = palette.surface
+    var hair = palette.line
+    var fieldBg = palette.field
     return [
       // Viewport-fixed: apps often scroll an inner container, where document
       // coordinates never change and absolutely-placed pins would sit still.
@@ -90,36 +94,42 @@
       'box-shadow:0 6px 20px -12px rgba(0,0,0,.6);white-space:nowrap;max-width:min(560px,80vw);overflow:hidden}',
       '.dsa-readout b{color:' + MARKER + ';font-weight:600}',
       '.dsa-readout span{color:' + muted + '}',
-      // pins
-      '.dsa-pin{appearance:none;padding:0;min-width:0;min-height:0;max-width:none;max-height:none;display:block;position:absolute;z-index:5;pointer-events:auto;width:20px;height:20px;margin:-10px 0 0 -10px;',
-      'border-radius:50%;background:' + MARKER + ';color:#20160c;border:1.5px solid ' + panelBg + ';',
-      'font:600 11px/17px ui-monospace,SFMono-Regular,Menlo,monospace;text-align:center;cursor:pointer;',
-      'box-shadow:0 2px 10px -2px rgba(0,0,0,.55);transform-origin:center;',
-      'animation:dsa-pop .18s cubic-bezier(.2,1.4,.4,1)}',
-      '.dsa-pin:hover{transform:scale(1.14)}.dsa-pin[hidden]{display:none!important}.dsa-pin:focus-visible{outline:2px solid '+ink+';outline-offset:3px}.dsa-layer button:focus-visible{outline:2px solid '+MARKER+';outline-offset:2px}',
-      '.dsa-pin[data-open="true"]{outline:2px solid color-mix(in srgb,' + MARKER + ' 45%,transparent);outline-offset:2px}',
-      '@keyframes dsa-pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}',
-      // comment card
-      '.dsa-card{position:absolute;z-index:6;width:min(320px,calc(100vw - 16px));pointer-events:auto;color:' + ink + ';',
-      'background:' + panelBg + ';border:1px solid ' + hair + ';border-radius:12px;overflow:hidden;',
-      'box-shadow:0 24px 60px -28px rgba(0,0,0,.7);backdrop-filter:blur(18px) saturate(160%);',
-      'border-left:3px solid ' + MARKER + ';',
-      'animation:dsa-rise .16s ease-out}',
-      '@keyframes dsa-rise{from{transform:translateY(4px);opacity:0}to{transform:none;opacity:1}}',
-      '.dsa-card header{display:flex;align-items:center;gap:8px;padding:7px 8px 7px 10px;border-bottom:1px solid ' + hair + '}',
-      '.dsa-card header .dsa-tag{flex:none;color:' + MARKER + ';font-weight:600}',
-      '.dsa-card header .dsa-clip{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + muted + '}',
-      '.dsa-card header button{all:unset;cursor:pointer;width:20px;height:20px;line-height:18px;text-align:center;border-radius:4px;color:' + muted + '}',
+      // Pins have a quiet 20px visual and a 32px pointer target.
+      '.dsa-pin{appearance:none;padding:0;min-width:0;min-height:0;max-width:none;max-height:none;display:block;position:absolute;z-index:5;pointer-events:auto;border-radius:50%;color:#20160c;text-align:center;cursor:pointer;transform-origin:center}',
+      '.dsa-pin:hover{transform:scale(1.08)}.dsa-pin[hidden]{display:none!important}',
+      '.dsa-layer button:focus-visible{outline:2px solid ' + THEME.focus + ';outline-offset:2px}',
+      '.dsa-pin[data-open="true"]{outline:2px solid ' + MARKER + ';outline-offset:1px}',
+      '.dsa-card{position:absolute;z-index:6;pointer-events:auto;color:' + ink + ';background:' + panelBg + ';scrollbar-width:thin;scrollbar-color:' + muted + ' transparent}',
+      '.dsa-card header{display:flex;align-items:center}',
+      '.dsa-card header .dsa-clip{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.dsa-card header button{all:unset;cursor:pointer;text-align:center;border-radius:4px}',
       '.dsa-card header button:hover{background:' + fieldBg + ';color:' + ink + '}',
-      '.dsa-card textarea{display:block;width:100%;min-height:62px;max-height:220px;resize:vertical;border:0;outline:none;',
-      'padding:9px 10px;background:transparent;color:inherit;font:inherit;font-size:12.5px}',
-      '.dsa-comment-text{padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px}',
-      '.dsa-card footer{display:flex;align-items:center;gap:8px;padding:6px 8px 8px 10px;border-top:1px solid ' + hair + '}',
-      '.dsa-card footer .dsa-hint{flex:1;color:' + muted + ';font-size:10.5px}',
-      '.dsa-btn{all:unset;cursor:pointer;padding:4px 10px;border-radius:4px;border:1px solid ' + hair + ';font-size:11.5px}',
-      '.dsa-btn:hover{border-color:' + MARKER + ';color:' + MARKER + '}',
-      '.dsa-btn.primary{background:' + MARKER + ';border-color:transparent;color:#20160c;font-weight:600}',
-      '.dsa-btn.primary:hover{opacity:.88;color:#20160c}',
+      '.dsa-card textarea{display:block;width:100%;border:0;outline:none;background:transparent;color:inherit}',
+      '.dsa-card footer{display:flex;align-items:center}',
+      '.dsa-comment-text{white-space:pre-wrap;overflow-wrap:anywhere}',
+      '.dsa-btn{all:unset;cursor:pointer;border-radius:4px}',
+      '.dsa-btn:hover{background:' + fieldBg + ';color:' + ink + '}',
+      '.dsa-pin{width:32px;height:32px;margin:-16px 0 0 -16px;border:0;background:transparent;box-shadow:none;font:600 10px/32px ' + THEME.sans + '}',
+      '.dsa-pin::before{content:"";position:absolute;inset:6px;z-index:-1;border-radius:50%;background:' + MARKER + ';box-shadow:0 0 0 2px ' + panelBg + ',0 2px 6px #0002}',
+      '.dsa-card{width:min(' + THEME.cardWidth + 'px,calc(100vw - 20px));max-height:calc(100vh - 16px);overflow:auto;border:1px solid ' + hair + ';border-radius:14px;backdrop-filter:none;box-shadow:0 10px 30px #0002,0 2px 6px #0001;animation:none}',
+      '.dsa-card header{padding:9px 10px 0;border-bottom:0;gap:6px}',
+      '.dsa-card header button{flex:none;position:relative;width:24px;height:24px;line-height:24px;color:' + muted + '}',
+      '.dsa-card header button[data-act="close"]::before{content:"";position:absolute;inset:-4px}',
+      '.dsa-card header .dsa-target{display:inline-flex;align-items:center;gap:5px;max-width:calc(100% - 30px);width:auto;height:auto;min-height:22px;line-height:1.5;padding:2px 6px;border-radius:5px;color:' + ink + ';background:' + fieldBg + ';font-size:10px}',
+      '.dsa-target .dsa-clip{color:inherit;min-width:0;max-width:100%;font-family:' + THEME.sans + '}',
+      '.dsa-number{flex:none;color:' + (dark ? MARKER : THEME.markerInk) + '}',
+      '.dsa-details{margin:7px 11px 0;padding:5px 0 8px;border-bottom:1px solid ' + hair + ';color:' + muted + ';font:10px/1.7 ' + THEME.mono + ';overflow-wrap:anywhere}',
+      '.dsa-details[hidden]{display:none!important}',
+      '.dsa-card textarea{min-height:58px;max-height:180px;resize:none;padding:10px 12px 5px;font:13px/1.7 ' + THEME.sans + '}',
+      '.dsa-card:focus-within{border-color:' + (dark ? '#777777' : '#bfc7cd') + '}',
+      '.dsa-card footer{border-top:0;padding:2px 10px 9px;gap:7px;min-height:39px}',
+      '.dsa-card footer .dsa-hint{margin-left:auto;flex:none;font:10px ' + THEME.sans + '}',
+      '.dsa-comment-card{outline:none}.dsa-comment-card textarea{cursor:text;padding-bottom:12px}',
+      '.dsa-btn{padding:3px 5px;font:11px/1.5 ' + THEME.sans + ';color:' + muted + ';border:0}',
+      '.dsa-btn.primary{display:inline-flex;align-items:center;justify-content:center;flex:none;width:30px;height:30px;padding:0;border:0;border-radius:50%;background:' + palette.action + ';color:' + palette.onAction + '}',
+      '.dsa-btn.primary:hover{background:' + palette.action + ';color:' + palette.onAction + '}',
+      '.dsa-btn.primary:disabled{opacity:.3;cursor:default}',
+      '.dsa-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}',
       '@media(prefers-reduced-motion:reduce){.dsa-layer *{animation:none!important;transition:none!important}}',
     ].join('')
   }
@@ -450,7 +460,7 @@
     setStyle(frame, 'top', rect.top + 'px')
     setStyle(frame, 'width', rect.width + 'px')
     setStyle(frame, 'height', rect.height + 'px')
-    setStyle(readout, 'display', 'flex')
+    setStyle(readout, 'display', state.mode === 'writing' || state.viewing ? 'none' : 'flex')
     if (readout.innerHTML !== position.content) readout.innerHTML = position.content
     setStyle(readout, 'left', position.left + 'px')
     setStyle(readout, 'top', position.top + 'px')
@@ -571,6 +581,7 @@
       pin.type = 'button'
       pin.setAttribute('aria-label', t('overlay.viewPin', { n: index + 1, comment: ann.comment }))
       pin.className = 'dsa-pin'
+      pin.dataset.id = ann.id
       pin.textContent = String(index + 1)
       pin.title = ann.comment
       var anchor = pinAnchor(ann)
@@ -607,19 +618,76 @@
 
   // ------------------------------------------------------------------ card UI
 
+  function draftIsDirty(draft, text) {
+    var original = draft.existing ? String(draft.initialComment || '') : ''
+    return draft.existing ? text !== original : !!text.trim()
+  }
+
+  function publishDraft(open) {
+    if (!card || !state.drafting) return
+    var area = card.querySelector('textarea')
+    if (!area) return
+    var draft = state.drafting
+    if (draftIsDirty(draft, area.value)) {
+      state.savedDraft = Object.assign({}, draft, { comment: area.value, open: open })
+    } else if (state.savedDraft && state.savedDraft.id === draft.id) {
+      state.savedDraft = null
+    }
+    post('draft', { draft: state.savedDraft })
+  }
+
+  function focusPin(id) {
+    if (!id) return
+    var pin = Array.prototype.find.call(pinLayer.querySelectorAll('.dsa-pin'), function (node) { return node.dataset.id === id })
+    if (pin && !pin.hidden) pin.focus({ preventScroll: true })
+  }
+
   function closeCard(preserve) {
-    if (card && state.drafting && preserve !== true) post('draft', { draft: null })
+    if (card && state.drafting && preserve !== 'silent') {
+      if (preserve !== false) publishDraft(false)
+      else if (state.savedDraft && state.savedDraft.id === state.drafting.id) {
+        state.savedDraft = null
+        post('draft', { draft: null })
+      }
+    }
     if (card && card.parentNode) card.parentNode.removeChild(card)
     card = null
     state.drafting = null
     state.viewing = null
     state.anchor = null
-    // Cancelling or viewing a card returns to normal interaction. A successful
-    // save explicitly resumes picking through setMode().
     if (state.mode === 'writing') state.mode = 'idle'
     state.selected = null
     render()
     post('mode', { mode: state.mode, count: state.annotations.length })
+  }
+
+  function targetLabel(detail) {
+    return clip(String(detail.ariaLabel || detail.text || detail.component || detail.tag || '').replace(/\s+/g, ' ').trim(), 60)
+  }
+
+  function cardHeader(detail, number) {
+    return '<header>' +
+      '<button type="button" class="dsa-target" data-act="details" aria-expanded="false" title="' + esc(t('overlay.details')) + '">' +
+      (number ? '<span class="dsa-number">' + esc(number) + '</span>' : '') +
+      '<span class="dsa-clip">' + esc(targetLabel(detail)) + '</span></button>' +
+      '<button type="button" data-act="close" aria-label="' + esc(t('overlay.close')) + '">✕</button></header>' +
+      '<div class="dsa-details" hidden>' + esc(detail.selector) + '</div>'
+  }
+
+  function bindCardDetails() {
+    card.querySelector('[data-act="details"]').addEventListener('click', function (event) {
+      var details = card.querySelector('.dsa-details')
+      details.hidden = !details.hidden
+      event.currentTarget.setAttribute('aria-expanded', String(!details.hidden))
+      anchorCard()
+    })
+  }
+
+  function editComment(ann, el) {
+    var draft = state.savedDraft && state.savedDraft.id === ann.id ? state.savedDraft : {
+      id: ann.id, detail: ann, comment: ann.comment, initialComment: ann.comment, existing: true,
+    }
+    openCard(draft, el)
   }
 
   function showComment(ann, el) {
@@ -628,46 +696,72 @@
     state.anchor = el
     card = document.createElement('div')
     card.className = 'dsa-card dsa-comment-card'
-    card.innerHTML =
-      '<header>' +
-      '<span class="dsa-tag dsa-mono">' + esc(String(state.annotations.indexOf(ann) + 1)) + '</span>' +
-      '<span class="dsa-clip dsa-mono">' + esc(ann.selector) + '</span>' +
-      '<button type="button" data-act="close" aria-label="' + esc(t('overlay.close')) + '">✕</button>' +
-      '</header>' +
-      '<div class="dsa-comment-text"></div>'
-    card.querySelector('.dsa-comment-text').textContent = ann.comment
-    card.querySelector('[data-act="close"]').addEventListener('click', closeCard)
+    card.setAttribute('role', 'region')
+    card.setAttribute('aria-label', t('overlay.viewTitle'))
+    card.tabIndex = -1
+    card.innerHTML = cardHeader(ann, String(state.annotations.indexOf(ann) + 1)) +
+      '<textarea class="dsa-comment-text" readonly aria-label="' + esc(t('overlay.commentLabel')) + '" title="' + esc(t('overlay.editHint')) + '"></textarea>'
+    var area = card.querySelector('textarea')
+    area.value = ann.comment
+    card.querySelector('[data-act="close"]').addEventListener('click', function () { closeCard() })
+    area.addEventListener('focus', function () {
+      if (state.viewing === ann.id) editComment(ann, el)
+    })
+    bindCardDetails()
     root.appendChild(card)
+    area.style.height = Math.min(180, Math.max(58, area.scrollHeight)) + 'px'
     renderPins()
     anchorCard()
+    // Keep the text unfocused until the user clicks it or tabs into it.
+    card.focus({ preventScroll: true })
   }
 
-  function openCard(draft, el) {
-    closeCard()
+  function openCard(draft, el, sendOnCommit) {
+    if (state.savedDraft && state.savedDraft.id !== draft.id) {
+      post('warning', { message: t('overlay.finishDraft') })
+      return
+    }
+    // Reuse the read-only field so the browser keeps the clicked caret position.
+    var viewedCard = state.viewing === draft.id ? card : null
+    if (!viewedCard) closeCard()
+    state.viewing = null
+    if (state.savedDraft && state.savedDraft.id === draft.id) draft = state.savedDraft
+    var original = draft.existing ? state.annotations.find(function (ann) { return ann.id === draft.id }) : null
+    draft = Object.assign({}, draft, { initialComment: draft.initialComment === undefined ? (original ? original.comment : '') : draft.initialComment })
     state.drafting = draft
+    state.sendOnCommit = !!sendOnCommit
     state.mode = 'writing'
     state.anchor = el
+    state.selected = el
     mountCapture()
     post('mode', { mode: state.mode })
-    var label = draft.detail.tag + (draft.detail.classes.length ? '.' + draft.detail.classes[0] : '')
-    card = document.createElement('div')
+    card = viewedCard || document.createElement('div')
     card.className = 'dsa-card'
-    card.innerHTML =
-      '<header>' +
-      '<span class="dsa-tag dsa-mono">' + esc(label) + '</span>' +
-      '<span class="dsa-clip dsa-mono">' + esc(draft.detail.selector) + '</span>' +
-      '<button type="button" data-act="close" aria-label="' + esc(t('overlay.close')) + '">✕</button>' +
-      '</header>' +
-      '<textarea placeholder="' + esc(t('overlay.placeholder')) + '"></textarea>' +
-      '<footer>' +
-      '<span class="dsa-hint dsa-mono">' + esc(t('overlay.hint')) + '</span>' +
-      '<button type="button" class="dsa-btn primary" data-act="save">' + esc(t('overlay.save')) + '</button>' +
-      '</footer>'
+    card.setAttribute('role', 'region')
+    card.setAttribute('aria-label', t('overlay.editTitle'))
+    if (!viewedCard) card.innerHTML = cardHeader(draft.detail) +
+      '<textarea aria-label="' + esc(t('overlay.commentLabel')) + '" placeholder="' + esc(t('overlay.placeholder')) + '"></textarea>'
+    card.insertAdjacentHTML('beforeend', '<footer><button type="button" class="dsa-btn" data-act="cancel">' + esc(t('overlay.cancel')) + '</button>' +
+      '<span class="dsa-hint">' + esc(t('overlay.hint')) + '</span>' +
+      '<button type="button" class="dsa-btn primary" data-act="save" aria-label="' + esc(t('overlay.save')) + '" title="' + esc(t('overlay.save')) + '">' +
+      '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20V4m-6 6 6-6 6 6"/></svg></button></footer>')
     var area = card.querySelector('textarea')
-    area.value = draft.comment || ''
-    area.addEventListener('input', function () { post('draft', { draft: Object.assign({}, draft, { comment: area.value }) }) })
-    card.querySelector('[data-act="close"]').addEventListener('click', closeCard)
-    card.querySelector('[data-act="save"]').addEventListener('click', commit)
+    if (area.value !== (draft.comment || '')) area.value = draft.comment || ''
+    area.readOnly = false
+    area.removeAttribute('title')
+    var saveButton = card.querySelector('[data-act="save"]')
+    saveButton.disabled = !area.value.trim()
+    area.addEventListener('input', function () {
+      saveButton.disabled = !area.value.trim()
+      area.style.height = 'auto'
+      area.style.height = Math.min(180, Math.max(58, area.scrollHeight)) + 'px'
+      publishDraft(true)
+      anchorCard()
+    })
+    if (!viewedCard) card.querySelector('[data-act="close"]').addEventListener('click', function () { closeCard() })
+    card.querySelector('[data-act="cancel"]').addEventListener('click', function () { closeCard(false) })
+    saveButton.addEventListener('click', commit)
+    if (!viewedCard) bindCardDetails()
     area.addEventListener('keydown', function (event) {
       if (event.isComposing || event.keyCode === 229) return
       if (event.key === 'Enter' && !event.shiftKey) {
@@ -675,17 +769,18 @@
         commit()
       } else if (event.key === 'Escape') {
         event.preventDefault()
-        // Esc means "leave annotation mode"; setMode closes the card for us.
+        event.stopPropagation()
+        var id = state.drafting && state.drafting.id
         setMode('idle')
+        focusPin(id)
       }
     })
-    root.appendChild(card)
+    if (!viewedCard) root.appendChild(card)
+    area.style.height = Math.min(180, Math.max(58, area.scrollHeight)) + 'px'
     anchorCard()
-    setTimeout(function () {
-      area.focus()
-    }, 10)
+    area.focus({ preventScroll: true })
     post('drafting', { id: draft.id, selector: draft.detail.selector })
-    if (area.value) post('draft', { draft: Object.assign({}, draft, { comment: area.value }) })
+    publishDraft(true)
   }
 
   /** Follow the panel's language and re-render. A card that is already open is
@@ -707,7 +802,6 @@
     if (!card || !state.drafting || !state.anchor) return
     var text = card.querySelector('textarea').value.trim()
     if (!text) {
-      closeCard()
       return
     }
     var draft = state.drafting
@@ -725,6 +819,9 @@
     }
     liveElements.set(draft.id, state.anchor)
     save()
+    if (state.savedDraft && state.savedDraft.id === draft.id) state.savedDraft = null
+    post('draft', { draft: state.savedDraft })
+    state.drafting = null
     var ship = state.sendOnCommit
     state.sendOnCommit = false
     setMode(ship ? 'idle' : 'picking')
@@ -755,9 +852,10 @@
     state.mode = 'writing'
     post('mode', { mode: state.mode, count: state.annotations.length })
     // Codex parity: ⌘/Ctrl-click means "write it and ship it".
-    state.sendOnCommit = Boolean(event.metaKey || event.ctrlKey)
     render()
-    openCard({ id: 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), detail: detailOf(el), comment: '' }, el)
+    var detail = detailOf(el)
+    var draft = state.savedDraft && state.savedDraft.detail.selector === detail.selector ? state.savedDraft : { id: 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), detail: detail, comment: '' }
+    openCard(draft, el, event.metaKey || event.ctrlKey)
   }
 
   var pointer = null
@@ -818,9 +916,18 @@
       state.annotations = Array.isArray(data.annotations) ? data.annotations : []
       liveElements.clear()
       save(); renderPins()
-      if (data.draft && data.draft.comment) {
-        var target = query(data.draft.detail.selector)
-        if (target) { state.mode = 'writing'; openCard(data.draft, target) }
+      state.savedDraft = data.draft && data.draft.detail && typeof data.draft.comment === 'string' ? data.draft : null
+      if (state.savedDraft && state.savedDraft.existing && state.savedDraft.initialComment === undefined) {
+        var original = state.annotations.find(function (ann) { return ann.id === state.savedDraft.id })
+        state.savedDraft.initialComment = original ? original.comment : ''
+      }
+      if (state.savedDraft && !draftIsDirty(state.savedDraft, state.savedDraft.comment)) {
+        state.savedDraft = null
+        post('draft', { draft: null })
+      }
+      if (state.savedDraft) {
+        var target = query(state.savedDraft.detail.selector)
+        if (target && state.savedDraft.open !== false) openCard(state.savedDraft, target)
       }
       return
     }
@@ -830,7 +937,17 @@
     // The panel cannot always know whether a card is open; let the overlay —
     // which owns the mode — decide what "toggle" means right now.
     if (data.type === 'toggle-mode') setMode(state.mode === 'idle' ? 'picking' : 'idle')
-    else if (data.type === 'focus') {
+    else if (data.type === 'resume-draft') {
+      if (state.savedDraft) {
+        var target = query(state.savedDraft.detail.selector)
+        if (target) { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); openCard(state.savedDraft, target) }
+        else post('missing', { id: state.savedDraft.id })
+      }
+    } else if (data.type === 'discard-draft') {
+      if (state.drafting && state.savedDraft && state.drafting.id === state.savedDraft.id) closeCard(false)
+      state.savedDraft = null
+      post('draft', { draft: null })
+    } else if (data.type === 'focus' || data.type === 'view' || data.type === 'edit') {
       var ann = state.annotations.filter(function (a) {
         return a.id === data.id
       })[0]
@@ -838,13 +955,17 @@
       if (!el) post('missing', { id: data.id })
       if (el) {
         el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-        state.selected = el
-        renderFrame()
+        if (data.type === 'view') showComment(ann, el)
+        else if (data.type === 'edit') editComment(ann, el)
+        else { state.selected = el; renderFrame() }
       }
     } else if (data.type === 'undo') {
-      if (undo) { state.annotations.push(undo); undo = null; save(); renderPins(); post('changed', { annotations: state.annotations }) }
+      if (undo) { state.annotations.push(undo); undo = null; if (undoDraft) { state.savedDraft = undoDraft; undoDraft = null; post('draft', { draft: state.savedDraft }) } save(); renderPins(); post('changed', { annotations: state.annotations }) }
     } else if (data.type === 'remove') {
       undo = state.annotations.find(function (a) { return a.id === data.id }) || null
+      if (state.viewing === data.id || (state.drafting && state.drafting.id === data.id)) closeCard()
+      undoDraft = state.savedDraft && state.savedDraft.id === data.id ? state.savedDraft : null
+      if (undoDraft) { state.savedDraft = null; post('draft', { draft: null }) }
       state.annotations = state.annotations.filter(function (a) {
         return a.id !== data.id
       })
@@ -874,6 +995,7 @@
   // picking. Pointer defaults remain available for native touch scrolling.
   ;['pointerdown', 'pointerup'].forEach(function (type) {
     window.addEventListener(type, function (event) {
+      if (type === 'pointerdown' && !root.contains(event.target)) post('interact')
       if (isAppEvent(event)) event.stopImmediatePropagation()
     }, true)
   })
@@ -894,7 +1016,7 @@
     if (state.viewing && card && !card.contains(event.target) && !pinLayer.contains(event.target)) closeCard()
   }, true)
   window.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape' && state.viewing) { closeCard(); return }
+    if (event.key === 'Escape' && state.viewing) { var id = state.viewing; closeCard(); focusPin(id); return }
     if (event.key === 'Escape' && !card) setMode('idle')
   }, true)
   /** Re-anchor stored annotations to their live elements: layout can shift
@@ -935,7 +1057,8 @@
     var next = location.pathname + location.search + location.hash
     if (next === currentPage) return
     save()
-    closeCard(true)
+    closeCard('silent')
+    state.savedDraft = null
     currentPage = next
     state.annotations = load()
     state.hover = null

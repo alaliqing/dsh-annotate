@@ -10,6 +10,30 @@ is the 0.1.0 entry below.
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-10-18
+
+### Changed
+
+- Simplify the preview to a thin toolbar, compact note cards and a floating
+  batch bar. Move secondary tools into menus and keep the preview size stable
+  when opening the annotation list.
+- Keep one sidebar entry, with a neutral comment icon and shorter bilingual
+  labels; retain the keyboard shortcuts.
+- Open saved notes for viewing. Clicking or tabbing into the comment edits it
+  in place; unchanged notes never become drafts. Esc preserves actual changes,
+  and Cancel discards them.
+- Send the full page URL once, each complete note and a compact element locator.
+  Include extra verification hints only for uncertain selectors, without
+  computed styles or component chains.
+
+### Fixed
+
+- Preserve real drafts across closing and reloading, block stale submissions
+  while an existing note has unsaved changes, and reset canceled quick-send
+  intent before the next normal edit.
+- Mark the panel stylesheet with its plugin owner so the Harness module loader
+  keeps the production styles attached.
+
 ## [0.1.13] - 2026-10-01
 
 ### Fixed
@@ -221,6 +245,7 @@ this; everything below is new to the public repository in one release.
 - Remote harness instances and HTTPS reverse-proxy deployments are out of scope
   for the local preview design.
 
+[0.1.15]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.15
 [0.1.13]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.13
 [0.1.12]: https://github.com/alaliqing/dsh-annotate/tree/v0.1.12
 [0.1.11]: https://github.com/alaliqing/dsh-annotate/releases/tag/v0.1.11

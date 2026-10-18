@@ -18,7 +18,7 @@ Give a coding agent this prompt:
 Read https://github.com/alaliqing/dsh-annotate and install dsh-annotate into the current local Harness profile following its README. Preserve existing configuration and keep the current task running. Report the installed version and explain how to restart after the task finishes.
 ```
 
-The commands below install `0.1.14` and can also upgrade an existing install.
+The commands below install `0.1.15` and can also upgrade an existing install.
 
 ### Desktop (macOS)
 
@@ -26,22 +26,22 @@ Open Desktop once to initialize its profile. It can stay open during installatio
 Use its bundled CLI; with the app installed in `/Applications`:
 
 ```sh
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@0.1.14
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@0.1.15
 ```
 
 Adjust the app path if needed. After the current task finishes, **fully quit and
-reopen Desktop**, then click **Annotate** or press `⌘/Ctrl⇧B`.
+reopen Desktop**, then choose **Annotations** in the right sidebar or press `⌘/Ctrl⇧B`.
 
 ### Web
 
 With the web CLI, Node.js 20+ and pnpm available, run:
 
 ```sh
-dsh plugin --profile web add dsh-annotate@0.1.14
+dsh plugin --profile web add dsh-annotate@0.1.15
 ```
 
 Replace `web` with your profile name if needed. After the current task finishes,
-restart that profile and refresh the browser, then open **Annotate**.
+restart that profile and refresh the browser, then open **Annotations** from the right sidebar.
 
 If installation fails, the panel is missing after restart, or you are upgrading
 `0.1.2` or earlier, see [installation troubleshooting](https://github.com/alaliqing/dsh-annotate/blob/main/docs/install-troubleshooting.md).
@@ -49,7 +49,7 @@ See [compatibility](https://github.com/alaliqing/dsh-annotate/blob/main/docs/com
 
 ## What you get
 
-- A sidebar tab (**Annotate**, `⌘/Ctrl⇧B`) listing the local development servers
+- A sidebar tab (**Annotations**, `⌘/Ctrl⇧B`) listing the local development servers
   that are actually running, with page titles, refreshed every five seconds.
 - Each app opens on its own isolated loopback preview origin, at its original
   paths, so root-absolute assets, SPA routes and WebSocket upgrades just work.
@@ -61,8 +61,8 @@ See [compatibility](https://github.com/alaliqing/dsh-annotate/blob/main/docs/com
 - **Send annotations** sends the review alone; **Add to composer** merges it into
   your draft. A rejected send keeps the annotations, and your draft and
   attachments are never sent by accident.
-- Structured payloads: original URL, viewport, selector and match count,
-  semantic anchors, component chain, geometry, computed styles and visible text.
+- Compact feedback: original URL, full notes and element locators. Ambiguous
+  or unverified selectors retain semantic and geometry hints for verification.
 - English and Chinese, switchable in the toolbar.
 
 ## Package contents

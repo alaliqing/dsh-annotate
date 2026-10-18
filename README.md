@@ -31,7 +31,7 @@ Give a coding agent this prompt:
 Read https://github.com/alaliqing/dsh-annotate and install dsh-annotate into the current local Harness profile following its README. Preserve existing configuration and keep the current task running. Report the installed version and explain how to restart after the task finishes.
 ```
 
-The commands below install `0.1.14` and can also upgrade an existing install.
+The commands below install `0.1.15` and can also upgrade an existing install.
 
 ### Desktop (macOS)
 
@@ -39,7 +39,7 @@ Open Desktop once to initialize its profile. It can stay open during installatio
 Use its bundled CLI; with the app installed in `/Applications`:
 
 ```sh
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@0.1.14
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@0.1.15
 ```
 
 Adjust the app path if needed. After the current task finishes, **fully quit and
@@ -50,7 +50,7 @@ reopen Desktop**, then click **Annotate** or press `⌘/Ctrl⇧B`.
 With the web CLI, Node.js 20+ and pnpm available, run:
 
 ```sh
-dsh plugin --profile web add dsh-annotate@0.1.14
+dsh plugin --profile web add dsh-annotate@0.1.15
 ```
 
 Replace `web` with your profile name if needed. After the current task finishes,
@@ -67,15 +67,15 @@ See [compatibility](docs/compatibility.md) for tested versions.
 - **Static pages need no server:** an `index.html` — or a built page under
   `dist/`, `build/`, `out/` or `public/` — is offered straight from the
   workspace and previewed from its own directory.
-- **Element-level context:** CSS selector and match count, semantic attributes,
-  React component chain, geometry, computed styles, and visible text.
+- **Focused feedback:** your full note and an element locator, with extra
+  verification context only when the selector is ambiguous or unverified.
 - **Markers that stay attached** through window or nested scrolling, resizing,
   and layout shifts.
 - **Two explicit send paths:** send the review by itself, or add it to the
   current draft. Failed sends keep every annotation.
 - **Isolated previews** that preserve app routes, assets, fetches, and WebSocket
   upgrades without sharing the Harness origin.
-- **English and Chinese UI**, switchable from the toolbar.
+- **English and Chinese UI**, switchable from the toolbar’s **More** menu.
 
 No screenshot is captured. Mark mode adds a temporary crosshair and overlay,
 while page and container scrolling stays native. By default, the plugin
@@ -85,20 +85,20 @@ configured command.
 ## Use
 
 1. Start your app's development server.
-2. Open a Harness conversation, then press `⌘/Ctrl⇧B` or click **Annotate**.
+2. Open a Harness conversation, then press `⌘/Ctrl⇧B` or choose **Annotations** from the right sidebar.
 3. Choose a detected service or one of the workspace's static pages, or enter a
    port or loopback URL.
 4. Click **Mark**, select an element, and write a note.
 5. Press **Enter** or click **Save**, then select the next element to keep
    annotating. Press **Esc** or **Mark** again to exit. Click a numbered marker
-   to view its note; click elsewhere to close it.
-6. Choose **Add to composer** or **Send annotations**.
+   to view its note; click inside its text to edit. Unchanged notes never become drafts. Esc or an outside click keeps actual changes as a resumable draft; **Cancel** discards them.
+6. Use the floating bottom bar to send the batch. Click its count to view notes; its **More** menu offers **Add to composer**.
 
 | Key | Action |
 | --- | --- |
 | `Enter` | Save and continue marking |
 | `Shift+Enter` | Insert a newline |
-| `Esc` | Cancel and leave marking mode |
+| `Esc` | Close the card and leave marking mode; keep actual changes |
 | `⌘/Ctrl` + click | Save and send the batch |
 
 Annotations and drafts are stored by Harness conversation and full app URL, so
@@ -114,19 +114,17 @@ static page only when no server is running at all.
 ## What gets sent
 
 ```text
-🎯 UI annotations · /settings · viewport 1440×900 (1)
-#1 button.primary   component: SubmitButton
-   semantics: aria-label="Save changes" · data-testid=save
-   component chain: SettingsPage > SettingsForm > SubmitButton
-   selector: #root > form > button.primary (matches: 1)
-   position/size: 96×32 @ (640, 512) · viewport center
-   computed styles: display:inline-block; padding:8px 16px; …
-   text: Save changes
-   note: Disable this until the form is dirty.
+Page annotations · http://127.0.0.1:5173/settings (1)
+1. Disable this until the form changes.
+   Element: button#save · “Save changes”
 ```
 
-React component names require a development build. Visible text is capped at
-120 characters.
+Each batch includes the full app URL once. Notes are never truncated; target
+labels are capped at 64 characters. Computed styles and component chains stay
+out of the message. If the selector has zero/multiple matches, is invalid or
+has no recorded match count, the message explicitly asks for verification and
+adds available semantic, component and geometry hints. No selector is treated
+as uniquely matched without a captured count of one.
 
 ## How the preview stays isolated
 

@@ -30,7 +30,7 @@
 请按 https://github.com/alaliqing/dsh-annotate 的 README，将 dsh-annotate 安装到本机 Harness 当前使用的 profile。保留已有配置，不要中断当前任务。完成后告诉我安装版本，以及任务结束后如何重启。
 ```
 
-以下命令安装 `0.1.14`，升级已有安装也可使用。
+以下命令安装 `0.1.15`，升级已有安装也可使用。
 
 ### Desktop（macOS）
 
@@ -38,7 +38,7 @@
 使用 Desktop 自带的 CLI；应用安装在 `/Applications` 时执行：
 
 ```sh
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@0.1.14
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-annotate@0.1.15
 ```
 
 如安装位置不同，请调整应用路径。等当前任务结束后，**彻底退出并重新打开 Desktop**，
@@ -49,7 +49,7 @@
 已有网页端 CLI、Node.js 20+ 和 pnpm 时执行：
 
 ```sh
-dsh plugin --profile web add dsh-annotate@0.1.14
+dsh plugin --profile web add dsh-annotate@0.1.15
 ```
 
 如使用自定义 profile，请将 `web` 换成实际名称。等当前任务结束后，
@@ -65,12 +65,11 @@ dsh plugin --profile web add dsh-annotate@0.1.14
   工作区的服务。
 - **静态页面无需服务器：** 工作区里的 `index.html`，或 `dist/`、`build/`、`out/`、
   `public/` 下已构建的页面，会直接列出，并以所在目录为根进行预览。
-- **元素级上下文：** CSS 选择器及命中数量、语义属性、React 组件链、几何信息、
-  计算样式和可见文本。
+- **精简反馈：** 完整批注意见与元素定位；选择器不唯一或尚未确认时，才补充核对信息。
 - **始终跟随元素的标记：** 支持窗口滚动、内层滚动、尺寸变化和布局位移。
 - **两种明确的发送方式：** 单独发送评审，或加入当前草稿；发送失败也不会丢批注。
 - **彼此隔离的预览：** 保留应用路由、资源、fetch 和 WebSocket，同时不与 Harness 共用源。
-- **中英双语界面**，可在工具栏切换。
+- **中英双语界面**，可在工具栏的「更多」菜单切换。
 
 插件不会截图。标注状态会添加临时十字光标和覆盖层，页面及内部容器仍使用原生滚动。
 默认只发现你已经运行的服务器；只有显式配置了
@@ -79,17 +78,17 @@ dsh plugin --profile web add dsh-annotate@0.1.14
 ## 使用
 
 1. 启动应用的开发服务器。
-2. 打开一个 Harness 对话，然后按 `⌘/Ctrl⇧B` 或点击顶部的**标注**按钮。
+2. 打开一个 Harness 对话，然后按 `⌘/Ctrl⇧B`，或从右侧栏打开**页面批注**。
 3. 选择检测到的服务、工作区内的静态页面，或手动输入端口/回环 URL。
-4. 点击左下角的**标注**，点选元素并写下意见。
-5. 按 **Enter** 或点击**保存**后，可直接选择下一个元素继续标注。按 **Esc** 或再次点击**标注**退出。点击编号图标查看批注，点击别处关闭。
-6. 选择**加入输入框**或**发送批注**。
+4. 点击工具栏的**标注**，点选元素并写下意见。
+5. 按 **Enter** 或点击**保存**后，可直接选择下一个元素继续标注。按 **Esc** 或再次点击**标注**退出。点击编号或底部列表先只读查看，光标点进正文后直接编辑。未修改不会标为草稿；实际修改后按 Esc 或点击别处会保留草稿，点**取消**则丢弃修改。
+6. 在底部浮动栏发送批注；点击数量展开列表，「更多」菜单可选择**加入输入框**。
 
 | 按键 | 操作 |
 | --- | --- |
 | `Enter` | 保存并继续标注 |
 | `Shift+Enter` | 换行 |
-| `Esc` | 取消并退出标注状态 |
+| `Esc` | 关闭批注框并退出标注，保留实际修改 |
 | `⌘/Ctrl` + 点击 | 保存并发送整批内容 |
 
 批注和草稿按 Harness 会话与完整应用 URL 存储，因此不同路由可以独立恢复，
@@ -103,18 +102,15 @@ dsh plugin --profile web add dsh-annotate@0.1.14
 ## 模型会收到什么
 
 ```text
-🎯 界面标注 · /settings · 视口 1440×900（1 条）
-#1 button.primary  组件: SubmitButton
-   语义: aria-label="保存修改" · data-testid=save
-   组件链: SettingsPage > SettingsForm > SubmitButton
-   选择器: #root > form > button.primary（命中 1 个元素）
-   位置/尺寸: 96×32 @ (640, 512) · 视口 正中
-   当前样式: display:inline-block; padding:8px 16px; …
-   文本: 保存修改
-   批注: 表单没有变化时，这个按钮应该禁用。
+页面批注 · http://127.0.0.1:5173/settings（1 条）
+1. 表单没有变化时，这个按钮应该禁用。
+   元素：button#save · “保存修改”
 ```
 
-React 组件名需要开发构建才能可靠获取；可见文本最多保留 120 个字符。
+每批只写一次完整页面地址。批注意见不会截断，元素名称最多保留 64 个字符。
+不再发送整段计算样式和组件链。选择器未命中、命中多个、无效或没有已记录的匹配数量时，
+会明确提示核对，并按需附上可用的语义、组件和位置线索；只有记录到恰好一个匹配时，
+才按确定定位处理。
 
 ## 预览隔离
 

@@ -1,5 +1,20 @@
 # Harness compatibility
 
+## Annotation interface release: 2026-10-18
+
+The `0.1.15` candidate passed `npm run check`, the complete distribution,
+compact-payload, preview, browser-reliability and native-scroll suites, and the
+isolated real-Harness packed acceptance check on macOS Apple Silicon with
+Desktop CLI `0.2.0-rc.2` and Chromium `153.0.8010.12`.
+
+The Harness check verifies one sidebar entry with no duplicate header button,
+the loaded panel stylesheet, the 48px toolbar, viewing before editing, no draft
+for an unchanged note, compact message delivery to the local model fixture,
+and preservation of an unrelated composer draft. Browser checks also cover
+320px, 390px, 420px and 520px panels, light/dark themes, draft recovery and
+submission failures. These automated checks do not extend native-window
+acceptance to Windows or Linux.
+
 ## Installation documentation release: 2026-10-02
 
 `0.1.14` keeps the runtime files and bundle patch from `0.1.13`. The repository
